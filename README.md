@@ -1,0 +1,250 @@
+# Kiro Telegram Bot 🤖
+
+> **Control [Kiro CLI](https://kiro.dev/cli/) from Telegram.** Your AI coding
+> assistant in your pocket — switch projects, resume and attach to live coding
+> sessions, stream answers with diffs, queue follow-ups, and run it 24/7 as a
+> background service on Windows, Linux, and macOS.
+
+![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Protocol](https://img.shields.io/badge/protocol-ACP-orange)
+
+A professional Telegram bridge for the **Agent Client Protocol (ACP)** that
+turns Kiro CLI into a mobile, always-on AI pair programmer. Send a message from
+anywhere and watch Kiro read files, run commands, and edit code on your machine
+— with live typing indicators, clean Telegram markdown, and unified edit diffs.
+
+Inspired by [`ajitnk-lab/kiro-acp-telegram-bot`](https://github.com/ajitnk-lab/kiro-acp-telegram-bot)
+and extended into a full multi-session client.
+
+---
+
+## ✨ Features
+
+| Capability | What it does |
+|---|---|
+| 🗂 **Projects** | `/projects` browses your folders and runs Kiro in the one you pick. |
+| ♻️ **Resume sessions** | `/sessions` lists recent Kiro sessions; tap to resume via ACP `session/load`. |
+| 🟢 **Connect to live sessions** | `/active` shows sessions running **right now** on your PC. Watch them live, or continue them — see below. |
+| 📡 **Live watch** | Follow a running session read-only in real time (tails its event log). |
+| 📜 **History** | `/history` shows the latest messages of any session. |
+| ⌨️ **Typing indicator** | Stays on for the whole turn, even through long tool chains. |
+| 📥 **Queued follow-ups** | Message while Kiro is busy — it's queued and runs next. `/btw` queues explicitly; `/flush` runs now. |
+| ✏️ **Edit diffs** | File edits show as unified `diff` blocks with `+N -M` stats. |
+| 💬 **Quality markdown** | Converts agent markdown to Telegram **MarkdownV2** with safe escaping and code-fence-aware splitting. |
+| 🔁 **Self-healing** | Auto-restarts the Kiro agent with backoff and re-binds your session. |
+| 🖥 **Runs 24/7** | 1-click install as a background service that starts on boot — Windows, Linux, macOS, auto-detected. |
+| 🔒 **Access control** | Restrict to specific Telegram user IDs. |
+
+---
+
+## 🚀 1-click install
+
+Clone or download, then run the installer for your OS. It installs
+dependencies, auto-detects `kiro-cli`, writes `.env`, asks for your bot token,
+and optionally sets up the background service.
+
+**Windows** — double-click `install.cmd` (or in a terminal):
+
+```powershell
+.\install.cmd
+```
+
+**Linux / macOS**:
+
+```bash
+chmod +x install.sh && ./install.sh
+```
+
+### Prerequisites
+
+- **Kiro CLI** installed and authenticated — run `kiro-cli chat` once to confirm.
+- **Node.js 20+**.
+- A **bot token** from [@BotFather](https://t.me/BotFather).
+- Your **Telegram user ID** from [@userinfobot](https://t.me/userinfobot).
+
+---
+
+## 🧑‍💻 Manual setup
+
+```bash
+npm install
+npm run setup            # auto-detects kiro-cli + project roots, writes .env
+# edit .env: set TELEGRAM_BOT_TOKEN and ALLOWED_USERS
+npm start
+```
+
+No build step — TypeScript runs directly via `tsx`.
+
+---
+
+## 🛠 Run as a background service (daemon)
+
+The bot installs as a **user-level** service that starts automatically on boot.
+The platform is auto-detected:
+
+| OS | Mechanism | Starts on |
+|---|---|---|
+| Windows | Hidden Scheduled Task | logon |
+| Linux | systemd **user** service (+ linger) | boot |
+| macOS | launchd LaunchAgent | login |
+
+```bash
+npm run install:service     # install + start, enable autostart
+npm run service -- status   # show install + running state
+npm run service -- stop
+npm run service -- restart
+npm run service -- logs 200 # tail the log file
+npm run uninstall:service   # stop + remove
+```
+
+Or use the `kiro-tg` command (if linked): `kiro-tg install | status | logs`.
+
+Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
+
+---
+
+## 💬 Commands
+
+```
+/projects     Pick a project (workspace)
+/sessions     List & resume recent sessions
+/active       Sessions running now on the PC
+/history      Show recent conversation history
+/new          Start a fresh session here
+/status       Current session, project & queue
+/btw <text>   Queue a follow-up to run after the current task
+/flush        Send queued follow-ups now
+/queue        Show queued follow-ups
+/clearqueue   Clear the queue
+/cancel       Stop the current turn
+/unwatch      Stop following a live session
+/model <id>   Switch the model for this session
+/restart      Restart the Kiro agent
+/help         Show help
+```
+
+Anything that isn't a command is sent to Kiro as a prompt. While a turn is
+running, your messages are queued and sent automatically when it finishes.
+
+---
+
+## 🔗 Connecting to live sessions
+
+Kiro keeps an **exclusive lock** on a session while it's running, so a second
+client cannot hijack a session that's open in another window. This bot handles
+that honestly:
+
+- **📡 Watch** — follow the running session's output live (read-only) by tailing
+  its event log. Stop with `/unwatch`.
+- **Continue (fork)** — tapping a live session opens a **linked continuation** in
+  the same project, primed with the recent transcript, so you can keep
+  interacting from Telegram without disturbing the original.
+
+Resuming an **idle** session loads it directly so you continue the exact thread.
+
+---
+
+## ⚙️ Configuration (`.env`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | **yes** | — | Bot token from @BotFather. |
+| `ALLOWED_USERS` | recommended | *(all)* | Comma-separated Telegram user IDs. Empty = anyone (unsafe). |
+| `KIRO_CLI_PATH` | no | auto / `kiro-cli` | Path to the `kiro-cli` binary. |
+| `KIRO_WORKSPACE` | no | cwd | Default working directory. |
+| `KIRO_AGENT` | no | — | Custom agent from `.kiro/agents/`. |
+| `KIRO_TRUST_ALL_TOOLS` | no | `true` | Run tools without prompts. |
+| `PROJECT_ROOTS` | no | workspace parent + home | Roots for `/projects`. |
+| `STREAM_THROTTLE_MS` | no | `1200` | Live-edit interval while streaming. |
+| `SHOW_TOOL_CALLS` | no | `true` | Show tool-call status messages. |
+| `SHOW_EDIT_DIFFS` | no | `true` | Show unified diffs for edits. |
+| `DIFF_MAX_LINES` | no | `120` | Max diff lines shown inline. |
+| `ACP_AUTO_RESTART` | no | `true` | Auto-restart the agent if it exits. |
+| `LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error`. |
+| `LOG_DIR` / `LOG_FILE` | no | `<project>/logs/…` | Log location. |
+
+---
+
+## 🧩 How it works
+
+```
+Telegram  ──HTTPS──▶  Bot (grammY)
+                         │  spawns once
+                         ▼
+                 kiro-cli acp  ◀── JSON-RPC 2.0 over stdio ──▶  Bot
+                         │
+                         ├─ session/new / session/load   (projects, resume)
+                         ├─ session/prompt               (your messages)
+                         └─ session/update notifications (streamed text, tools)
+```
+
+One `kiro-cli acp` process multiplexes many sessions (one per chat/project).
+Streamed `agent_message_chunk` updates are assembled into a live, throttled
+message; `tool_call` updates render as professional status lines with diffs.
+
+Kiro persists sessions to `~/.kiro/sessions/cli/`:
+`<id>.json` (metadata), `<id>.jsonl` (history, used by `/history` and live
+watch), and `<id>.lock` (`{ pid }`, used to detect active sessions).
+
+---
+
+## 📁 Project layout
+
+```
+src/
+├── index.ts              Entry point, daemon-friendly logging, shutdown
+├── cli.ts                CLI: run / install / start / stop / status / logs
+├── config.ts             .env loading, paths, daemon options
+├── logger.ts             Leveled logger with file output
+├── acp/                  ACP client, transport, server-side handlers, types
+├── sessions/             Session discovery, history parser, live tail watcher
+├── projects/             Project directory discovery
+├── render/               Markdown→MarkdownV2, diffs, tool formatting, chunking
+├── stream/               Incremental edit-streaming
+├── service/              Cross-platform daemon (windows/linux/macos + selector)
+└── bot/                  grammY bot, per-chat runtime, handlers
+```
+
+---
+
+## ❓ FAQ
+
+**Can I run the Kiro Telegram bot 24/7 on a server?** Yes — `npm run install:service`
+installs a user-level service (systemd/launchd/Scheduled Task) that starts on
+boot and auto-restarts on crash.
+
+**How do I control Kiro from my phone?** Set up the bot, message it on Telegram,
+and pick a project with `/projects`. Every message becomes a Kiro prompt.
+
+**Can multiple people use one bot?** Add their IDs to `ALLOWED_USERS`. Each chat
+gets its own session.
+
+**Why can't I take over a session that's already running?** Kiro locks active
+sessions exclusively. The bot lets you **watch** it live or **fork** a linked
+continuation instead. See "Connecting to live sessions".
+
+**Does it support custom agents and MCP servers?** Yes — set `KIRO_AGENT`, and
+the bot inherits whatever MCP servers Kiro CLI is configured with.
+
+---
+
+## 🔐 Security
+
+This bot lets authorized Telegram users run commands and edit files on the host.
+**Always set `ALLOWED_USERS`**, keep `.env` private, and run as a non-privileged
+user. See [SECURITY.md](./SECURITY.md) for the full model.
+
+---
+
+## 📄 License
+
+[MIT](./LICENSE) — see also [CONTRIBUTING](./CONTRIBUTING.md) and
+[Code of Conduct](./CODE_OF_CONDUCT.md).
+
+---
+
+<sub>Keywords: Kiro CLI Telegram bot, ACP Agent Client Protocol, AI coding
+assistant on Telegram, mobile AI pair programming, remote coding agent, run AI
+agent as a service, Windows/Linux/macOS daemon, ChatOps for developers.</sub>

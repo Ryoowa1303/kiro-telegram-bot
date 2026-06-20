@@ -1,0 +1,19 @@
+node_modules/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Logs & runtime
+*.log
+logs/
+data/
+
+# Generated service launchers
+run-service.vbs
+
+# Build / tooling
+dist/
+.DS_Store
+.cache/

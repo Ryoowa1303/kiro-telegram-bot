@@ -1,0 +1,60 @@
+{
+  "name": "kiro-telegram-bot",
+  "version": "1.1.0",
+  "description": "Control Kiro CLI from Telegram over the Agent Client Protocol (ACP). Switch projects, resume and attach to live coding sessions, stream responses with diffs, queue follow-ups, and run 24/7 as a cross-platform background service.",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "kiro-tg": "bin/kiro-tg.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "setup": "node scripts/setup.mjs",
+    "service": "tsx src/cli.ts",
+    "install:service": "tsx src/cli.ts install",
+    "uninstall:service": "tsx src/cli.ts uninstall",
+    "service:status": "tsx src/cli.ts status",
+    "service:logs": "tsx src/cli.ts logs"
+  },
+  "keywords": [
+    "kiro",
+    "kiro-cli",
+    "acp",
+    "agent-client-protocol",
+    "telegram",
+    "telegram-bot",
+    "ai-agent",
+    "ai-coding-assistant",
+    "mobile-coding",
+    "chatops",
+    "devtools",
+    "daemon",
+    "cross-platform",
+    "grammy"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/artickc/kiro-telegram-bot.git"
+  },
+  "homepage": "https://github.com/artickc/kiro-telegram-bot#readme",
+  "bugs": {
+    "url": "https://github.com/artickc/kiro-telegram-bot/issues"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "diff": "^7.0.0",
+    "dotenv": "^16.4.7",
+    "grammy": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
