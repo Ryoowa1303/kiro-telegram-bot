@@ -167,6 +167,10 @@ export class AcpClient extends EventEmitter {
     await this.request("session/set_model", { sessionId, modelId });
   }
 
+  async setMode(sessionId: string, modeId: string): Promise<void> {
+    await this.request("session/set_mode", { sessionId, modeId });
+  }
+
   /** Execute a Kiro slash command via the _kiro.dev extension. */
   async executeCommand(sessionId: string, command: string): Promise<unknown> {
     return this.request("_kiro.dev/commands/execute", { sessionId, command });

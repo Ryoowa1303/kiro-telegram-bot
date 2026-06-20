@@ -4,10 +4,15 @@
  */
 import type { Api } from "grammy";
 import type { AcpClient } from "../acp/client.js";
+import type { SettingsStore } from "../app/settings-store.js";
 import type { AppConfig } from "../config.js";
-import type { ProjectManager, ProjectEntry } from "../projects/manager.js";
+import type { ProjectEntry, ProjectManager } from "../projects/manager.js";
 import type { SessionStore } from "../sessions/store.js";
+import type { TaskRunner } from "../tasks/runner.js";
+import type { TaskStore } from "../tasks/store.js";
+import type { StatusPanel } from "./menu/status-panel.js";
 import type { RuntimeRegistry } from "./registry.js";
+import type { TaskWizard } from "./wizard/task-wizard.js";
 
 export interface BotDeps {
   api: Api;
@@ -17,6 +22,11 @@ export interface BotDeps {
   store: SessionStore;
   projects: ProjectManager;
   menuCache: MenuCache;
+  settings: SettingsStore;
+  statusPanel: StatusPanel;
+  tasks: TaskStore;
+  taskRunner: TaskRunner;
+  wizard: TaskWizard;
 }
 
 /** Caches the last project list shown per chat for callback resolution. */

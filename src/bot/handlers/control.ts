@@ -3,8 +3,10 @@
  */
 import type { Bot } from "grammy";
 import { basename } from "node:path";
+import { textPrompt } from "../../app/types.js";
 import type { BotDeps } from "../deps.js";
 import { HELP_TEXT } from "../commands.js";
+import { mainKeyboard } from "../menu/keyboard.js";
 
 export function registerControl(bot: Bot, deps: BotDeps): void {
   bot.command("start", async (ctx) => {
@@ -13,12 +15,18 @@ export function registerControl(bot: Bot, deps: BotDeps): void {
     const lines = [
       "\u{1F44B} Welcome! I bridge Telegram to Kiro CLI over ACP.",
       agent?.name ? `Connected to ${agent.name} ${agent.version ?? ""}`.trim() : "",
-      `Workspace: ${rt.cwd}`,
+      `Workspace: ${rt.projectName ?? rt.cwd}`,
       "",
-      "Send a message to start, or /projects to pick a folder.",
-      "Type /help for everything I can do.",
+      "Use the menu below, or just send a message. The pinned panel above",
+      "always shows your project, agent, reasoning and model.",
     ].filter(Boolean);
-    await ctx.reply(lines.join("\n"));
+    await ctx.reply(lines.join("\n"), { reply_markup: mainKeyboard() });
+    await deps.statusPanel.refresh(ctx.chat.id);
+  });
+
+  bot.command("menu", async (ctx) => {
+    await ctx.reply("\u2328\uFE0F Menu ready.", { reply_markup: mainKeyboard() });
+    await deps.statusPanel.refresh(ctx.chat.id);
   });
 
   bot.command("help", async (ctx) => {
@@ -61,7 +69,7 @@ export function registerControl(bot: Bot, deps: BotDeps): void {
       return;
     }
     const rt = deps.registry.get(ctx.chat.id);
-    rt.enqueue(text);
+    rt.enqueue(textPrompt(text));
     await ctx.reply(`\u{1F4E5} Queued (position ${rt.queueLength}). It'll run when the current task finishes.`);
   });
 

@@ -31,13 +31,15 @@ async function main(): Promise<void> {
   });
 
   await acp.start();
-  const { bot, registry } = await createBot(cfg, acp);
+  const { bot, registry, scheduler } = await createBot(cfg, acp);
+  scheduler.start();
 
   let shuttingDown = false;
   const shutdown = (code: number): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info("shutting down…");
+    scheduler.stop();
     registry.disposeAll();
     void bot.stop().catch(() => {});
     acp.stop();

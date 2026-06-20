@@ -6,7 +6,7 @@
  * Each row offers: Connect (resume, or fork if the session is locked/live),
  * 📜 History (static view), and 📡 Watch (live read-only follow).
  */
-import { type Bot, InlineKeyboard } from "grammy";
+import { type Bot, type Context, InlineKeyboard } from "grammy";
 import { basename } from "node:path";
 import type { BotDeps } from "../deps.js";
 import { readHistory } from "../../sessions/history.js";
@@ -16,17 +16,19 @@ import { showHistory } from "./history.js";
 const LIMIT = 20;
 const UUID = "([0-9a-fA-F-]{36})";
 
-export function registerSessions(bot: Bot, deps: BotDeps): void {
-  bot.command("sessions", async (ctx) => {
-    const metas = deps.store.list(LIMIT);
-    if (metas.length === 0) {
-      await ctx.reply("No saved sessions found in ~/.kiro/sessions/cli.");
-      return;
-    }
-    await ctx.reply("Recent sessions \u2014 tap to connect, \u{1F4DC} history, \u{1F4E1} watch live:", {
-      reply_markup: buildKeyboard(metas),
-    });
+export async function showSessions(ctx: Context, deps: BotDeps): Promise<void> {
+  const metas = deps.store.list(LIMIT);
+  if (metas.length === 0) {
+    await ctx.reply("No saved sessions found in ~/.kiro/sessions/cli.");
+    return;
+  }
+  await ctx.reply("Recent sessions \u2014 tap to connect, \u{1F4DC} history, \u{1F4E1} watch live:", {
+    reply_markup: buildKeyboard(metas),
   });
+}
+
+export function registerSessions(bot: Bot, deps: BotDeps): void {
+  bot.command("sessions", (ctx) => showSessions(ctx, deps));
 
   bot.command("active", async (ctx) => {
     const metas = deps.store.listActive();

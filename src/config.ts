@@ -53,6 +53,7 @@ export interface AppConfig {
   logsDir: string;
   logFile: string;
   acpAutoRestart: boolean;
+  dataDir: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -98,6 +99,9 @@ export function loadConfig(): AppConfig {
     logsDir,
     logFile,
     acpAutoRestart: bool(process.env.ACP_AUTO_RESTART, true),
+    dataDir: process.env.DATA_DIR?.trim()
+      ? resolve(expandHome(process.env.DATA_DIR.trim()))
+      : join(PROJECT_ROOT, "data"),
   };
 
   return cfg;

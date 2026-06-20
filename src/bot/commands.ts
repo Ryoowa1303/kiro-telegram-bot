@@ -2,10 +2,13 @@
  * Bot command definitions (for the Telegram command menu) and help text.
  */
 export const COMMANDS: { command: string; description: string }[] = [
-  { command: "start", description: "Welcome & current status" },
+  { command: "start", description: "Welcome, menu & status panel" },
+  { command: "menu", description: "Show the menu keyboard" },
   { command: "projects", description: "Pick a project (workspace)" },
   { command: "sessions", description: "List & resume recent sessions" },
   { command: "active", description: "Sessions running now on the PC" },
+  { command: "tasks", description: "Manage scheduled tasks" },
+  { command: "newtask", description: "Create a scheduled task" },
   { command: "history", description: "Show recent conversation history" },
   { command: "new", description: "Start a fresh session here" },
   { command: "status", description: "Current session, project & queue" },
