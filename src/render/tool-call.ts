@@ -1,9 +1,9 @@
 /**
- * Format ACP tool-call updates into professional Telegram messages, including
- * unified diffs for file edits.
+ * Format ACP tool-call updates into clear, RAW markdown blocks so they read
+ * distinctly from the agent's prose and thinking. Commands appear in a `bash`
+ * block, file edits as a `diff` block.
  */
 import type { SessionUpdate, ToolCallContent } from "../acp/types.js";
-import { escapeMdV2 } from "./escape.js";
 import { renderUnifiedDiff } from "./diff.js";
 
 const KIND_ICON: Record<string, string> = {
@@ -19,7 +19,7 @@ const KIND_ICON: Record<string, string> = {
 };
 
 const STATUS_ICON: Record<string, string> = {
-  pending: "\u2026",
+  pending: "",
   in_progress: "\u23F3",
   completed: "\u2705",
   failed: "\u274C",
@@ -30,44 +30,33 @@ export interface ToolFormatOptions {
   diffMaxLines: number;
 }
 
-/** Returns a MarkdownV2 string describing the tool call, or "" to skip. */
+/** Returns a RAW markdown block describing the tool call, or "" to skip. */
 export function formatToolCall(u: SessionUpdate, opts: ToolFormatOptions): string {
   const kind = (u.kind || "other").toLowerCase();
   const icon = KIND_ICON[kind] ?? KIND_ICON.other;
-  const status = u.status ? STATUS_ICON[u.status] ?? "" : "";
+  const status = u.status ? (STATUS_ICON[u.status] ?? "") : "";
   const raw = (u.rawInput || {}) as Record<string, unknown>;
-
   const title = u.title || titleFromRaw(kind, raw);
-  let header = `${icon} ${escapeMdV2(title)}`;
-  if (status) header += ` ${status}`;
 
-  // Command execution: show the command in inline code.
+  let out = `${icon} **${title}**${status ? ` ${status}` : ""}`;
+
   if (kind === "execute") {
     const cmd = strOf(raw.command ?? raw.cmd);
-    if (cmd) header += "\n`" + cmd.replace(/([`\\])/g, "\\$1") + "`";
+    if (cmd) out += "\n```bash\n" + cmd + "\n```";
   }
 
-  // File edits: show a diff when available.
   if (kind === "edit" && opts.showDiffs) {
     const diff = buildEditDiff(u, raw, opts.diffMaxLines);
-    if (diff) header += "\n" + diff;
+    if (diff && diff.block) {
+      const stat = `${diff.added > 0 ? "+" + diff.added : ""}${diff.removed > 0 ? " -" + diff.removed : ""}`.trim();
+      out += `${stat ? `  (${stat})` : ""}\n${diff.block}`;
+    }
   }
 
-  return header;
+  return out;
 }
 
-function titleFromRaw(kind: string, raw: Record<string, unknown>): string {
-  const path = strOf(raw.path ?? raw.file_path ?? raw.filename);
-  if (path) return `${capitalize(kind)} ${path}`;
-  return capitalize(kind);
-}
-
-function buildEditDiff(
-  u: SessionUpdate,
-  raw: Record<string, unknown>,
-  maxLines: number,
-): string {
-  // 1) Diff block supplied directly by the agent.
+function buildEditDiff(u: SessionUpdate, raw: Record<string, unknown>, maxLines: number) {
   const blocks = collectContent(u);
   const diffBlock = blocks.find((b) => b.type === "diff");
   if (diffBlock) {
@@ -78,26 +67,22 @@ function buildEditDiff(
       maxLines,
     });
   }
-
-  // 2) str_replace style input.
   const oldStr = strOf(raw.old_str ?? raw.oldStr);
   const newStr = strOf(raw.new_str ?? raw.newStr);
   if (oldStr || newStr) {
-    return renderUnifiedDiff({
-      path: strOf(raw.path) || "file",
-      oldText: oldStr,
-      newText: newStr,
-      maxLines,
-    });
+    return renderUnifiedDiff({ path: strOf(raw.path) || "file", oldText: oldStr, newText: newStr, maxLines });
   }
-
-  // 3) Full-file create.
   const content = strOf(raw.file_text ?? raw.content ?? raw.text);
   if (content) {
     return renderUnifiedDiff({ path: strOf(raw.path) || "file", oldText: "", newText: content, maxLines });
   }
+  return undefined;
+}
 
-  return "";
+function titleFromRaw(kind: string, raw: Record<string, unknown>): string {
+  const path = strOf(raw.path ?? raw.file_path ?? raw.filename);
+  if (path) return `${capitalize(kind)} ${path}`;
+  return capitalize(kind);
 }
 
 function collectContent(u: SessionUpdate): ToolCallContent[] {

@@ -1,35 +1,42 @@
 /**
- * The always-visible reply keyboard shown beneath the message box.
+ * The always-visible reply keyboard. Stateful buttons (Project / Agent /
+ * Reasoning / Model) show the CURRENT value and are matched by their emoji
+ * prefix; the rest are fixed actions.
  */
 import { Keyboard } from "grammy";
+import { reasoningLabel } from "../../app/reasoning.js";
+import type { ChatSettings } from "../../app/types.js";
 
-export const BTN = {
-  project: "\u{1F4C1} Project",
-  agent: "\u{1F916} Agent",
-  reasoning: "\u{1F9E0} Reasoning",
-  model: "\u{1F9E9} Model",
+export const PREFIX = { project: "\u{1F4C1}", agent: "\u{1F916}", reasoning: "\u{1F9E0}", model: "\u{1F9E9}" };
+export const FIXED = {
   sessions: "\u{1F5C2} Sessions",
   tasks: "\u2705 Tasks",
   status: "\u{1F4CA} Status",
   newSession: "\u{1F195} New",
   stop: "\u23F9 Stop",
-} as const;
+};
+export const FIXED_LABELS = Object.values(FIXED);
+export const STATEFUL_RE = /^(\u{1F4C1}|\u{1F916}|\u{1F9E0}|\u{1F9E9})\s/u;
 
-export const BUTTON_LABELS: string[] = Object.values(BTN);
+function trunc(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + "\u2026" : s;
+}
 
-export function mainKeyboard(): Keyboard {
+export function mainKeyboard(s: ChatSettings, projectName?: string): Keyboard {
+  const proj = projectName || s.projectName || "Project";
   return new Keyboard()
-    .text(BTN.project)
-    .text(BTN.agent)
-    .text(BTN.reasoning)
+    .text(`${PREFIX.project} ${trunc(proj, 18)}`)
+    .text(`${PREFIX.agent} ${trunc(s.agent || "default", 16)}`)
     .row()
-    .text(BTN.model)
-    .text(BTN.sessions)
-    .text(BTN.tasks)
+    .text(`${PREFIX.reasoning} ${reasoningLabel(s.reasoning)}`)
+    .text(`${PREFIX.model} ${trunc(s.model || "default", 16)}`)
     .row()
-    .text(BTN.status)
-    .text(BTN.newSession)
-    .text(BTN.stop)
+    .text(FIXED.sessions)
+    .text(FIXED.tasks)
+    .row()
+    .text(FIXED.status)
+    .text(FIXED.newSession)
+    .text(FIXED.stop)
     .resized()
     .persistent();
 }

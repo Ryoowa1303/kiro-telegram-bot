@@ -5,6 +5,7 @@
 import { type Context, InlineKeyboard } from "grammy";
 import type { Bot } from "grammy";
 import type { BotDeps } from "../deps.js";
+import { refreshMenu } from "../menu/refresh.js";
 
 const PAGE = 40;
 
@@ -48,6 +49,7 @@ export function registerProjects(bot: Bot, deps: BotDeps): void {
       await ctx.editMessageText(
         `\u2705 Project set: ${entry.name}\n${entry.path}\n\nNew session ready \u2014 send a message.`,
       );
+      await refreshMenu(ctx, deps, `\u{1F4C1} Now working in ${entry.name}`);
     } catch (err) {
       await ctx.editMessageText(`\u274C Could not open ${entry.name}: ${(err as Error).message}`);
     }

@@ -1,8 +1,8 @@
 /**
- * Render a unified diff for a file edit as a Telegram `diff` code block.
+ * Render a unified diff for a file edit as RAW markdown (a ```diff fenced
+ * block). Escaping/splitting is handled downstream by the markdown converter.
  */
 import { structuredPatch } from "diff";
-import { escapeCode } from "./escape.js";
 
 export interface DiffInput {
   path: string;
@@ -11,19 +11,18 @@ export interface DiffInput {
   maxLines: number;
 }
 
-/**
- * Returns a MarkdownV2 ```diff code block, or an empty string when there is
- * no textual change to show.
- */
-export function renderUnifiedDiff(input: DiffInput): string {
+export interface DiffResult {
+  block: string; // raw ```diff fenced markdown, or ""
+  added: number;
+  removed: number;
+}
+
+export function renderUnifiedDiff(input: DiffInput): DiffResult {
   const oldText = input.oldText ?? "";
   const newText = input.newText ?? "";
-  if (oldText === newText) return "";
+  if (oldText === newText) return { block: "", added: 0, removed: 0 };
 
-  const patch = structuredPatch(input.path, input.path, oldText, newText, "", "", {
-    context: 3,
-  });
-
+  const patch = structuredPatch(input.path, input.path, oldText, newText, "", "", { context: 2 });
   const lines: string[] = [];
   let added = 0;
   let removed = 0;
@@ -31,27 +30,19 @@ export function renderUnifiedDiff(input: DiffInput): string {
   for (const hunk of patch.hunks) {
     lines.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
     for (const l of hunk.lines) {
+      if (l.startsWith("\\")) continue; // drop "\ No newline at end of file"
       if (l.startsWith("+")) added++;
       else if (l.startsWith("-")) removed++;
       lines.push(l);
     }
   }
+  if (lines.length === 0) return { block: "", added, removed };
 
-  if (lines.length === 0) return "";
-
-  let truncatedNote = "";
   let shown = lines;
+  let note = "";
   if (lines.length > input.maxLines) {
     shown = lines.slice(0, input.maxLines);
-    truncatedNote = `\n… (+${lines.length - input.maxLines} more lines)`;
+    note = `\n… +${lines.length - input.maxLines} more lines`;
   }
-
-  const body = escapeCode(shown.join("\n") + truncatedNote);
-  const stat = `+${added} -${removed}`;
-  return "```diff\n" + body + "\n```\n" + escapeStat(stat);
-}
-
-function escapeStat(stat: string): string {
-  // Used outside a code block, so escape MarkdownV2 specials in the +/- stat.
-  return "_" + stat.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1") + "_";
+  return { block: "```diff\n" + shown.join("\n") + note + "\n```", added, removed };
 }

@@ -42,6 +42,28 @@ and extended into a full multi-session client.
 
 ---
 
+## 📊 How it compares
+
+| Capability | **This bot** | Other Kiro Telegram bots |
+|---|:---:|:---:|
+| Connect Kiro CLI to Telegram (ACP) | ✅ | ✅ |
+| Switch between projects | ✅ | ❌ |
+| Resume saved sessions | ✅ | ❌ |
+| Attach to **live** PC sessions (watch / fork) | ✅ | ❌ |
+| Multiple isolated sessions | ✅ | ❌ (single shared) |
+| Queued follow-ups while busy | ✅ | ❌ |
+| **Scheduled tasks** (cron-like) | ✅ | ❌ |
+| **Multi-image** prompts (albums) | ✅ | ❌ |
+| Unified **edit diffs** | ✅ | ❌ |
+| Persistent menu + live status panel | ✅ | ❌ |
+| Agent / reasoning / model menus | ✅ | ❌ |
+| Combined, throttled output (no spam) | ✅ | ❌ |
+| Auto-restart + session re-bind | ✅ | ❌ |
+| 24/7 cross-platform service | ✅ | ❌ |
+| 1-click install | ✅ | ❌ |
+
+---
+
 ## 🚀 1-click install
 
 Clone or download, then run the installer for your OS. It installs
@@ -276,6 +298,45 @@ the bot inherits whatever MCP servers Kiro CLI is configured with.
 This bot lets authorized Telegram users run commands and edit files on the host.
 **Always set `ALLOWED_USERS`**, keep `.env` private, and run as a non-privileged
 user. See [SECURITY.md](./SECURITY.md) for the full model.
+
+---
+
+## 🗺 Roadmap
+
+- [x] Projects, resume & attach to live sessions
+- [x] Queued follow-ups, edit diffs, quality MarkdownV2
+- [x] Persistent menu + live status panel (project / agent / reasoning / model)
+- [x] Scheduled tasks (once / daily / weekly / monthly / interval)
+- [x] Multi-image prompts (albums)
+- [x] Combined, throttled output (anti-spam)
+- [x] 24/7 cross-platform background service
+- [ ] Voice messages → speech-to-text → prompt
+- [ ] Context-usage % and token stats in the status panel
+- [ ] Localized bot UI (i18n)
+- [ ] Docker image with `kiro-cli` preinstalled
+- [ ] Webhook mode for serverless deployment
+
+Have an idea? Open a [feature request](../../issues/new/choose).
+
+## 🤝 Contributing
+
+Contributions are very welcome! See **[CONTRIBUTING.md](./CONTRIBUTING.md)** to get
+started — no build step is required (`npm run dev`), and `npm run typecheck` must
+pass.
+
+New here? Look for issues labeled
+[**good first issue**](../../issues?q=is%3Aopen+label%3A%22good+first+issue%22)
+and [**help wanted**](../../issues?q=is%3Aopen+label%3A%22help+wanted%22).
+
+By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md).
+
+---
+
+## ⭐ Star history
+
+[![Star History Chart](https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date)](https://star-history.com/#artickc/kiro-telegram-bot&Date)
+
+If this project helps you, please consider giving it a ⭐ — it really helps!
 
 ---
 

@@ -7,6 +7,7 @@ import { textPrompt } from "../../app/types.js";
 import type { BotDeps } from "../deps.js";
 import { HELP_TEXT } from "../commands.js";
 import { mainKeyboard } from "../menu/keyboard.js";
+import { refreshMenu } from "../menu/refresh.js";
 
 export function registerControl(bot: Bot, deps: BotDeps): void {
   bot.command("start", async (ctx) => {
@@ -20,14 +21,13 @@ export function registerControl(bot: Bot, deps: BotDeps): void {
       "Use the menu below, or just send a message. The pinned panel above",
       "always shows your project, agent, reasoning and model.",
     ].filter(Boolean);
-    await ctx.reply(lines.join("\n"), { reply_markup: mainKeyboard() });
+    await ctx.reply(lines.join("\n"), {
+      reply_markup: mainKeyboard(deps.settings.get(ctx.chat.id), rt.projectName),
+    });
     await deps.statusPanel.refresh(ctx.chat.id);
   });
 
-  bot.command("menu", async (ctx) => {
-    await ctx.reply("\u2328\uFE0F Menu ready.", { reply_markup: mainKeyboard() });
-    await deps.statusPanel.refresh(ctx.chat.id);
-  });
+  bot.command("menu", (ctx) => refreshMenu(ctx, deps, "\u2328\uFE0F Menu ready."));
 
   bot.command("help", async (ctx) => {
     await ctx.reply(HELP_TEXT);

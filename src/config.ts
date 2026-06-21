@@ -89,7 +89,7 @@ export function loadConfig(): AppConfig {
     agent: process.env.KIRO_AGENT?.trim() || undefined,
     trustAllTools: bool(process.env.KIRO_TRUST_ALL_TOOLS, true),
     projectRoots: [...new Set(roots)],
-    streamThrottleMs: num(process.env.STREAM_THROTTLE_MS, 1200),
+    streamThrottleMs: num(process.env.STREAM_THROTTLE_MS, 1500),
     showToolCalls: bool(process.env.SHOW_TOOL_CALLS, true),
     showEditDiffs: bool(process.env.SHOW_EDIT_DIFFS, true),
     diffMaxLines: num(process.env.DIFF_MAX_LINES, 120),

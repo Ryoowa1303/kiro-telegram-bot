@@ -103,6 +103,7 @@ export class SessionRuntime {
   // ── sessions ───────────────────────────────────────────────────────────────
 
   async startNewSession(cwd: string, projectName?: string): Promise<void> {
+    if (this.busy) await this.cancel();
     this.stopWatch();
     this.sessionId = await this.acp.newSession(cwd);
     this.cwd = cwd;
@@ -117,6 +118,7 @@ export class SessionRuntime {
     if (!this.acp.supportsLoadSession) {
       throw new Error("This Kiro CLI build does not support loading sessions.");
     }
+    if (this.busy) await this.cancel();
     this.stopWatch();
     await this.acp.loadSession(sessionId, cwd);
     this.sessionId = sessionId;
@@ -184,18 +186,21 @@ export class SessionRuntime {
 
   private async applySessionPrefs(): Promise<void> {
     const s = this.settings.get(this.chatId);
+    // Adopt the session's current agent (mode) when the user hasn't chosen one.
+    if (!s.agent && this.acp.currentModeId) {
+      this.settings.update(this.chatId, { agent: this.acp.currentModeId });
+    } else if (this.sessionId && s.agent && this.acp.hasMode(s.agent) && s.agent !== this.acp.currentModeId) {
+      try {
+        await this.acp.setMode(this.sessionId, s.agent);
+      } catch (e) {
+        log.debug(`apply agent failed: ${(e as Error).message}`);
+      }
+    }
     if (this.sessionId && s.model) {
       try {
         await this.acp.setModel(this.sessionId, s.model);
       } catch (e) {
         log.debug(`apply model failed: ${(e as Error).message}`);
-      }
-    }
-    if (this.sessionId && s.agent) {
-      try {
-        await this.acp.setMode(this.sessionId, s.agent);
-      } catch (e) {
-        log.debug(`apply agent failed: ${(e as Error).message}`);
       }
     }
   }
@@ -296,9 +301,14 @@ export class SessionRuntime {
   private onUpdate(sessionId: string, update: SessionUpdate): void {
     if (!this.busy || sessionId !== this.sessionId || !this.streamer) return;
     const kind = update.sessionUpdate;
-    if (kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
+    if (kind === "agent_message_chunk") {
       const text = update.content?.text;
-      if (typeof text === "string") void this.streamer.appendText(text);
+      if (typeof text === "string") this.streamer.appendOutput(text);
+      return;
+    }
+    if (kind === "agent_thought_chunk") {
+      const text = update.content?.text;
+      if (typeof text === "string") this.streamer.appendThought(text);
       return;
     }
     if (kind === "tool_call" || kind === "tool_call_update") {
@@ -310,7 +320,7 @@ export class SessionRuntime {
         showDiffs: this.cfg.showEditDiffs,
         diffMaxLines: this.cfg.diffMaxLines,
       });
-      if (md) void this.streamer.addToolMessage(md, md);
+      if (md) this.streamer.addTool(md);
     }
   }
 

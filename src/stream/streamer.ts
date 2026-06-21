@@ -1,25 +1,37 @@
 /**
- * ResponseStreamer — turns a stream of agent text deltas and tool-call updates
- * into a live, professional Telegram transcript.
+ * ResponseStreamer — renders a whole agent turn into as FEW Telegram messages as
+ * possible, edited at most once per throttle window (anti-spam, avoids 429s).
  *
- * - Assistant text is shown in a "live" bubble edited in place (throttled).
- * - When a tool call arrives, the current bubble is sealed and the tool message
- *   is posted, so the chat reads chronologically: text -> tool -> text.
- * - Long output is split into multiple messages without breaking code fences.
+ * The turn is modelled as ordered segments so the transcript reads clearly:
+ *   • plain prose      = the agent talking to you
+ *   • > 💭 quoted block = the agent's thinking
+ *   • 🔧 + code block   = tool calls / terminal commands / diffs
+ *
+ * A single "live" message is edited as content grows; only when it would exceed
+ * Telegram's size limit is it sealed and a new live message started.
  */
 import type { Api } from "grammy";
 import { chunkMarkdown } from "../render/chunk.js";
 import { toTelegramMarkdown } from "../render/markdown.js";
 import { safeEdit, safeSend } from "../bot/telegram-io.js";
 
-const RAW_SOFT_LIMIT = 3000; // raw markdown chars before sealing a bubble
+const SOFT_LIMIT = 3500;
+const THINK_TAIL = 500;
+
+type SegKind = "out" | "think" | "tool";
+interface Seg {
+  kind: SegKind;
+  text: string;
+}
 
 export class ResponseStreamer {
-  private pending = "";
+  private readonly segs: Seg[] = [];
+  private sealedIdx = 0;
   private liveId: number | undefined;
   private timer: NodeJS.Timeout | undefined;
-  private flushing = false;
   private dirty = false;
+  private flushing = false;
+  private closed = false;
 
   constructor(
     private readonly api: Api,
@@ -27,124 +39,129 @@ export class ResponseStreamer {
     private readonly throttleMs: number,
   ) {}
 
-  /** Append a streamed text delta from the agent. */
-  async appendText(delta: string): Promise<void> {
-    if (!delta) return;
-    this.pending += delta;
-    await this.sealOverflow();
-    this.scheduleFlush();
+  appendOutput(text: string): void {
+    if (!text) return;
+    this.merge("out", text);
+    this.schedule();
   }
 
-  /** Post a standalone tool-call message (sealing the current text bubble). */
-  async addToolMessage(markdownV2: string, plain: string): Promise<void> {
-    await this.sealLive();
-    await safeSend(this.api, this.chatId, markdownV2, plain);
+  appendThought(text: string): void {
+    if (!text) return;
+    this.merge("think", text);
+    this.schedule();
   }
 
-  /** Flush everything and finalize the transcript. */
-  async finalize(): Promise<void> {
-    this.clearTimer();
-    await this.sealOverflow();
-    await this.sealLive();
+  addTool(rawMarkdown: string): void {
+    if (!rawMarkdown) return;
+    this.segs.push({ kind: "tool", text: rawMarkdown });
+    this.schedule();
   }
 
-  /** Whether any visible content was produced. */
   get hasOutput(): boolean {
-    return this.liveId !== undefined || this.pending.length > 0;
+    return this.liveId !== undefined || this.segs.some((s) => s.text.trim().length > 0);
+  }
+
+  async finalize(): Promise<void> {
+    this.closed = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    await this.flush(true);
   }
 
   // ── internals ──────────────────────────────────────────────────────────────
 
-  private scheduleFlush(): void {
+  private merge(kind: SegKind, text: string): void {
+    const last = this.segs.at(-1);
+    if (last && last.kind === kind) last.text += text;
+    else this.segs.push({ kind, text });
+  }
+
+  private schedule(): void {
+    if (this.closed) return;
     this.dirty = true;
     if (this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = undefined;
-      void this.flush();
+      void this.flush(false);
     }, this.throttleMs);
   }
 
-  private async flush(): Promise<void> {
+  private async flush(final: boolean): Promise<void> {
     if (this.flushing) {
-      this.scheduleFlush();
+      if (!final) this.schedule();
       return;
     }
-    if (!this.dirty || this.pending.length === 0) return;
+    if (!this.dirty && !final) return;
     this.flushing = true;
     this.dirty = false;
     try {
-      const rendered = toTelegramMarkdown(this.pending);
-      if (this.liveId === undefined) {
-        this.liveId = await safeSend(this.api, this.chatId, rendered, this.pending);
+      await this.sealOverflow();
+      const src = renderSegs(this.segs.slice(this.sealedIdx));
+      if (!src.trim()) return;
+      const rendered = toTelegramMarkdown(src);
+      const chunks = chunkMarkdown(rendered);
+      const plain = chunkMarkdown(src);
+      if (chunks.length <= 1) {
+        const mdv2 = chunks[0] ?? rendered;
+        if (this.liveId === undefined) this.liveId = await safeSend(this.api, this.chatId, mdv2, src);
+        else await safeEdit(this.api, this.chatId, this.liveId, mdv2, src);
       } else {
-        await safeEdit(this.api, this.chatId, this.liveId, rendered, this.pending);
+        // Remainder no longer fits one message: flush all, last stays live.
+        for (let i = 0; i < chunks.length; i++) {
+          const mdv2 = chunks[i]!;
+          const p = plain[i] ?? mdv2;
+          if (i === 0 && this.liveId !== undefined) await safeEdit(this.api, this.chatId, this.liveId, mdv2, p);
+          else if (i < chunks.length - 1) await safeSend(this.api, this.chatId, mdv2, p);
+          else this.liveId = await safeSend(this.api, this.chatId, mdv2, p);
+        }
+        this.sealedIdx = this.segs.length; // everything before the live tail is sealed
       }
     } finally {
       this.flushing = false;
     }
   }
 
-  /** Seal whole bubbles once the buffer grows past the soft limit. */
+  /** Seal leading segments into finalized messages while the live view is too big. */
   private async sealOverflow(): Promise<void> {
-    while (this.pending.length > RAW_SOFT_LIMIT) {
-      const split = findSafeSplit(this.pending, RAW_SOFT_LIMIT);
-      if (split <= 0) break; // no safe boundary yet; let it grow
-      const head = this.pending.slice(0, split);
-      this.pending = this.pending.slice(split).replace(/^\n+/, "");
-      await this.sealText(head);
+    let live = this.segs.slice(this.sealedIdx);
+    while (live.length > 1 && toTelegramMarkdown(renderSegs(live)).length > SOFT_LIMIT) {
+      const headCount = live.length - 1;
+      await this.seal(this.sealedIdx, this.sealedIdx + headCount);
+      this.sealedIdx += headCount;
+      this.liveId = undefined;
+      live = this.segs.slice(this.sealedIdx);
     }
   }
 
-  /** Finalize the current live bubble with all remaining pending text. */
-  private async sealLive(): Promise<void> {
-    if (this.pending.length === 0) {
-      this.liveId = undefined;
-      return;
-    }
-    await this.sealText(this.pending);
-    this.pending = "";
-  }
-
-  /** Render `md` and commit it as final message(s), reusing liveId for the first. */
-  private async sealText(md: string): Promise<void> {
-    const rendered = toTelegramMarkdown(md);
-    const chunks = chunkMarkdown(rendered);
-    const plainChunks = chunkMarkdown(md);
-    if (chunks.length === 0) {
-      this.liveId = undefined;
-      return;
-    }
+  private async seal(from: number, to: number): Promise<void> {
+    const src = renderSegs(this.segs.slice(from, to));
+    if (!src.trim()) return;
+    const chunks = chunkMarkdown(toTelegramMarkdown(src));
+    const plain = chunkMarkdown(src);
     for (let i = 0; i < chunks.length; i++) {
       const mdv2 = chunks[i]!;
-      const plain = plainChunks[i] ?? mdv2;
-      if (i === 0 && this.liveId !== undefined) {
-        await safeEdit(this.api, this.chatId, this.liveId, mdv2, plain);
-      } else {
-        await safeSend(this.api, this.chatId, mdv2, plain);
-      }
-    }
-    this.liveId = undefined;
-  }
-
-  private clearTimer(): void {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
+      const p = plain[i] ?? mdv2;
+      if (i === 0 && this.liveId !== undefined) await safeEdit(this.api, this.chatId, this.liveId, mdv2, p);
+      else await safeSend(this.api, this.chatId, mdv2, p);
     }
   }
 }
 
-/** Find a newline split point <= max where ``` fences stay balanced. */
-function findSafeSplit(text: string, max: number): number {
-  const window = text.slice(0, max);
-  const candidates = [window.lastIndexOf("\n\n"), window.lastIndexOf("\n")];
-  for (const idx of candidates) {
-    if (idx > 0 && fencesBalanced(text.slice(0, idx))) return idx;
-  }
-  return -1;
+function renderSegs(segs: Seg[]): string {
+  return segs
+    .map((s) => {
+      if (s.kind === "out") return s.text.trim();
+      if (s.kind === "think") return quoteThought(s.text);
+      return s.text.trim();
+    })
+    .filter((x) => x.length > 0)
+    .join("\n\n");
 }
 
-function fencesBalanced(text: string): boolean {
-  const fences = text.match(/^```/gm);
-  return !fences || fences.length % 2 === 0;
+function quoteThought(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  const short = t.length > THINK_TAIL ? "…" + t.slice(-THINK_TAIL) : t;
+  const lines = short.split("\n");
+  return lines.map((l, i) => (i === 0 ? `> 💭 *thinking:* ${l}` : `> ${l}`)).join("\n");
 }

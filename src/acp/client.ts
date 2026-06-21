@@ -60,6 +60,9 @@ export class AcpClient extends EventEmitter {
   private restartTimer?: NodeJS.Timeout;
   agentInfo?: { name?: string; version?: string };
   capabilities?: InitializeResult["agentCapabilities"];
+  /** Available agent "modes" advertised by Kiro for new sessions. */
+  availableModes: Array<{ id: string; name: string; description?: string }> = [];
+  currentModeId?: string;
 
   constructor(private readonly opts: AcpClientOptions) {
     super();
@@ -138,8 +141,16 @@ export class AcpClient extends EventEmitter {
   }
 
   async newSession(cwd: string): Promise<string> {
-    const res = (await this.request("session/new", { cwd, mcpServers: [] })) as NewSessionResult;
+    const res = (await this.request("session/new", { cwd, mcpServers: [] })) as NewSessionResult & {
+      modes?: { currentModeId?: string; availableModes?: Array<{ id: string; name: string; description?: string }> };
+    };
+    if (res.modes?.availableModes?.length) this.availableModes = res.modes.availableModes;
+    if (res.modes?.currentModeId) this.currentModeId = res.modes.currentModeId;
     return res.sessionId;
+  }
+
+  hasMode(id: string): boolean {
+    return this.availableModes.some((m) => m.id === id);
   }
 
   async loadSession(sessionId: string, cwd: string): Promise<void> {
@@ -169,6 +180,7 @@ export class AcpClient extends EventEmitter {
 
   async setMode(sessionId: string, modeId: string): Promise<void> {
     await this.request("session/set_mode", { sessionId, modeId });
+    this.currentModeId = modeId;
   }
 
   /** Execute a Kiro slash command via the _kiro.dev extension. */
