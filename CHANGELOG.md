@@ -7,6 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The latest section is published verbatim as the GitHub Release notes by
 `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed.
 
+## [1.5.0] - Unreleased
+
+> Staging section for the next release.
+
+### Added
+
+- **🔕 Quiet notifications (on by default)** — the bot now sends messages
+  **silently** (no notification sound) so streaming output and tool/status
+  chatter no longer buzz your phone. Only messages that **finish a turn**
+  (✅ Done / ⏹ Stopped / ❌ Error), **scheduled-task results**, and **permission
+  prompts** ring. Toggle with `QUIET_NOTIFICATIONS` (default `true`).
+- **🔐 Session-aware permission prompts** — when a permission request belongs to
+  a *background* session, the prompt names it ("Session X needs approval…") and
+  adds a **🔀 Switch to it** button next to Allow/Deny (which approve in place,
+  without switching). Permission prompts always ring, even in quiet mode.
+
 ## [1.4.0] - 2026-06-21
 
 The **"work on many sessions at once"** release — drive several Kiro sessions
