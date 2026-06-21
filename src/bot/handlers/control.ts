@@ -6,7 +6,7 @@ import { basename } from "node:path";
 import { textPrompt } from "../../app/types.js";
 import type { BotDeps } from "../deps.js";
 import { HELP_TEXT } from "../commands.js";
-import { mainKeyboard } from "../menu/keyboard.js";
+import { compactKeyboard, mainMenuInline } from "../menu/keyboard.js";
 import { refreshMenu } from "../menu/refresh.js";
 
 export function registerControl(bot: Bot, deps: BotDeps): void {
@@ -16,18 +16,18 @@ export function registerControl(bot: Bot, deps: BotDeps): void {
     const lines = [
       "\u{1F44B} Welcome! I bridge Telegram to Kiro CLI over ACP.",
       agent?.name ? `Connected to ${agent.name} ${agent.version ?? ""}`.trim() : "",
-      `Workspace: ${rt.projectName ?? rt.cwd}`,
       "",
-      "Use the menu below, or just send a message. The pinned panel above",
-      "always shows your project, agent, reasoning and model.",
+      "Tap \u2630 Menu for everything. The pinned panel above always shows your",
+      "project, agent, reasoning and model. Just send a message to start.",
     ].filter(Boolean);
-    await ctx.reply(lines.join("\n"), {
-      reply_markup: mainKeyboard(deps.settings.get(ctx.chat.id), rt.projectName),
-    });
+    await ctx.reply(lines.join("\n"), { reply_markup: compactKeyboard() });
     await deps.statusPanel.refresh(ctx.chat.id);
   });
 
-  bot.command("menu", (ctx) => refreshMenu(ctx, deps, "\u2328\uFE0F Menu ready."));
+  bot.command("menu", async (ctx) => {
+    await ctx.reply("\u2699\uFE0F Menu", { reply_markup: mainMenuInline() });
+    await deps.statusPanel.refresh(ctx.chat.id);
+  });
 
   bot.command("help", async (ctx) => {
     await ctx.reply(HELP_TEXT);

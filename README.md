@@ -163,14 +163,17 @@ running, your messages are queued and sent automatically when it finishes.
 
 ## 🧭 The menu & status panel
 
-A **persistent reply keyboard** sits under the message box with quick actions:
-Project · Agent · Reasoning · Model · Sessions · Tasks · Status · New · Stop.
+A tiny **persistent bar** sits under the message box — **☰ Menu · 🧭 Running ·
+⏹ Stop** — so common actions are one tap away without clutter. Tap **☰ Menu**
+(or `/menu`) to open a clean, grouped **inline menu**: Project · New · Running ·
+Sessions · Agent · Model · Reasoning · Tasks · Status · Usage · Stop · Kill all.
+The bar can be hidden (🙈) and restored (⌨️ Show bar or `/menu`).
 
 A **pinned status panel** at the top of the chat always shows your current
-**project, agent, reasoning effort, model, session id, activity and queue**,
-and updates live as things change. Tap **Agent**, **Reasoning** or **Model** to
-change them from inline menus (reasoning steers how thoroughly the agent works:
-Minimal → Max).
+**project, agent, reasoning effort, model, session id, context %, activity and
+queue** (and how many sessions the chat controls), updating live. Pick **Agent**,
+**Reasoning** or **Model** from the inline menu (reasoning steers how thoroughly
+the agent works: Minimal → Max).
 
 ## ⏰ Scheduled tasks
 
