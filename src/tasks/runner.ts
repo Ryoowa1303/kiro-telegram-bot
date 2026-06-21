@@ -67,12 +67,14 @@ export class TaskRunner {
     const body = text.trim() || "_(no text output)_";
     const footer = tools > 0 ? `\n\n\u{1F527} ${tools} tool call(s)` : "";
     const header = `\u23F0 **Task: ${task.name}** \u00B7 ${project}`;
-    await sendMarkdownDoc(this.api, task.chatId, `${header}\n\n${body}${footer}`);
+    await sendMarkdownDoc(this.api, task.chatId, `${header}\n\n${body}${footer}`, { loud: true });
   }
 
   private async deliverError(task: Task, message: string): Promise<void> {
     try {
-      await this.api.sendMessage(task.chatId, `\u274C Task "${task.name}" failed: ${message}`);
+      await this.api.sendMessage(task.chatId, `\u274C Task "${task.name}" failed: ${message}`, {
+        disable_notification: false,
+      });
     } catch {
       /* non-fatal */
     }

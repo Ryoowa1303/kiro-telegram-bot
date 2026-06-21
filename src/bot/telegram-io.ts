@@ -93,11 +93,17 @@ function sleep(ms: number): Promise<void> {
  * Convert a raw Markdown document to MarkdownV2, split it into Telegram-sized
  * chunks, and send each — with plain-text fallback per chunk.
  */
-export async function sendMarkdownDoc(api: Api, chatId: number, rawMarkdown: string): Promise<void> {
+export async function sendMarkdownDoc(
+  api: Api,
+  chatId: number,
+  rawMarkdown: string,
+  opts?: { loud?: boolean },
+): Promise<void> {
+  const extra = opts?.loud ? { disable_notification: false } : {};
   const rendered = toTelegramMarkdown(rawMarkdown);
   const mdChunks = chunkMarkdown(rendered);
   const plainChunks = chunkMarkdown(rawMarkdown);
   for (let i = 0; i < mdChunks.length; i++) {
-    await safeSend(api, chatId, mdChunks[i]!, plainChunks[i] ?? mdChunks[i]!);
+    await safeSend(api, chatId, mdChunks[i]!, plainChunks[i] ?? mdChunks[i]!, extra);
   }
 }
