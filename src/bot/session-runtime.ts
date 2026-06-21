@@ -299,6 +299,7 @@ export class SessionRuntime {
     this.streamer = new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs);
     this.typing.start();
     this.changed();
+    const startedAt = Date.now();
 
     const content = buildContentBlocks(input, {
       reasoning: reasoningDirective(this.reasoning),
@@ -309,11 +310,10 @@ export class SessionRuntime {
     try {
       const result = await this.acp.prompt(this.sessionId!, content);
       await this.streamer.finalize();
-      if (this.cancelled || result.stopReason === "cancelled") await this.notify("\u23F9 Stopped.");
-      else if (!this.streamer.hasOutput) await this.notify("\u2705 Done (no text output).");
+      await this.notify(this.completionLine(result.stopReason, startedAt));
     } catch (err) {
       await this.streamer?.finalize().catch(() => {});
-      await this.notify(`\u274C Error: ${(err as Error).message}`);
+      await this.notify(`\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`);
     } finally {
       this.typing.stop();
       this.streamer = undefined;
@@ -322,6 +322,19 @@ export class SessionRuntime {
     }
 
     await this.flushQueue();
+  }
+
+  /** Build the "turn finished" line shown after every turn. */
+  private completionLine(stopReason: string | undefined, startedAt: number): string {
+    const elapsed = fmtDuration(Date.now() - startedAt);
+    if (this.cancelled || stopReason === "cancelled") {
+      return `\u23F9 Stopped \u00B7 ${elapsed}`;
+    }
+    const reason = stopReason || "end_turn";
+    const ctx = this.contextInfo()?.contextUsagePercentage;
+    const ctxStr = ctx !== undefined ? ` \u00B7 ctx ${ctx.toFixed(0)}%` : "";
+    const noOut = this.streamer?.hasOutput ? "" : " \u00B7 no text output";
+    return `\u2705 Done \u00B7 ${reason} \u00B7 ${elapsed}${ctxStr}${noOut}`;
   }
 
   private async flushQueue(): Promise<void> {
@@ -394,6 +407,16 @@ export class SessionRuntime {
     if (body.trim()) await sendMarkdownDoc(this.api, this.chatId, body);
   }
 }
+
+/** Format an elapsed duration compactly (e.g. "8s", "2m 13s", "1h 4m"). */
+function fmtDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 
 function buildPriming(transcript: string): string {
   return [
