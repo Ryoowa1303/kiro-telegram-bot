@@ -1,0 +1,69 @@
+/**
+ * /killall — terminate all active Kiro sessions running on this PC (the ones
+ * holding a live session lock), excluding the bot's own agent process. Guarded
+ * by an inline confirmation since it kills processes.
+ */
+import { execFileSync } from "node:child_process";
+import { type Bot, type Context, InlineKeyboard } from "grammy";
+import { createLogger } from "../../logger.js";
+import type { SessionMeta } from "../../sessions/types.js";
+import type { BotDeps } from "../deps.js";
+
+const log = createLogger("killall");
+
+function targets(deps: BotDeps): SessionMeta[] {
+  const self = deps.acp.pid;
+  return deps.store.listActive().filter((s) => s.lockPid && s.lockPid !== self);
+}
+
+export async function showKillConfirm(ctx: Context, deps: BotDeps): Promise<void> {
+  const active = targets(deps);
+  if (active.length === 0) {
+    await ctx.reply("\u2705 No other active Kiro sessions to kill.");
+    return;
+  }
+  const list = active
+    .slice(0, 12)
+    .map((s) => `\u2022 ${s.title.slice(0, 40)} (pid ${s.lockPid})`)
+    .join("\n");
+  const kb = new InlineKeyboard()
+    .text(`\u{1F6D1} Kill ${active.length}`, "killall:confirm")
+    .text("Cancel", "killall:cancel");
+  await ctx.reply(
+    `\u{1F6D1} Kill ${active.length} active session(s)?\n${list}\n\n(The bot's own session is excluded.)`,
+    { reply_markup: kb },
+  );
+}
+
+export function registerKill(bot: Bot, deps: BotDeps): void {
+  bot.command("killall", (ctx) => showKillConfirm(ctx, deps));
+
+  bot.callbackQuery("killall:cancel", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText("Cancelled.").catch(() => {});
+  });
+
+  bot.callbackQuery("killall:confirm", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const active = targets(deps);
+    let killed = 0;
+    for (const s of active) {
+      if (s.lockPid && killPid(s.lockPid)) killed++;
+    }
+    await ctx.editMessageText(`\u{1F6D1} Killed ${killed} of ${active.length} active session(s).`).catch(() => {});
+  });
+}
+
+function killPid(pid: number): boolean {
+  try {
+    if (process.platform === "win32") {
+      execFileSync("taskkill", ["/F", "/T", "/PID", String(pid)], { stdio: "ignore" });
+    } else {
+      process.kill(pid, "SIGKILL");
+    }
+    return true;
+  } catch (e) {
+    log.debug(`kill ${pid} failed:`, (e as Error).message);
+    return false;
+  }
+}

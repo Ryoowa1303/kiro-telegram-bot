@@ -158,6 +158,11 @@ export class AcpClient extends EventEmitter {
     return Boolean(this.capabilities?.loadSession);
   }
 
+  /** PID of the bot's own kiro-cli acp process (to avoid killing ourselves). */
+  get pid(): number | undefined {
+    return this.proc?.pid;
+  }
+
   async newSession(cwd: string): Promise<string> {
     const res = (await this.request("session/new", { cwd, mcpServers: [] })) as { sessionId: string };
     this.parseSessionExtras(res);

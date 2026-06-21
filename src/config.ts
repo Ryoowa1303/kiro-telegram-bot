@@ -47,6 +47,8 @@ export interface AppConfig {
   showToolCalls: boolean;
   showEditDiffs: boolean;
   diffMaxLines: number;
+  sendAgentImages: boolean;
+  agentImagesMax: number;
   logLevel: string;
   sessionsDir: string;
   projectRoot: string;
@@ -98,6 +100,8 @@ export function loadConfig(): AppConfig {
     showToolCalls: bool(process.env.SHOW_TOOL_CALLS, true),
     showEditDiffs: bool(process.env.SHOW_EDIT_DIFFS, true),
     diffMaxLines: num(process.env.DIFF_MAX_LINES, 120),
+    sendAgentImages: bool(process.env.SEND_AGENT_IMAGES, true),
+    agentImagesMax: num(process.env.AGENT_IMAGES_MAX, 8),
     logLevel: process.env.LOG_LEVEL?.trim() || "info",
     sessionsDir,
     projectRoot: PROJECT_ROOT,

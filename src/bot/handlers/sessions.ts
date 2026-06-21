@@ -16,19 +16,26 @@ import { showHistory } from "./history.js";
 const LIMIT = 20;
 const UUID = "([0-9a-fA-F-]{36})";
 
-export async function showSessions(ctx: Context, deps: BotDeps): Promise<void> {
-  const metas = deps.store.list(LIMIT);
+export async function showSessions(ctx: Context, deps: BotDeps, query?: string): Promise<void> {
+  const q = (query ?? "").trim().toLowerCase();
+  let metas = deps.store.list(q ? 200 : LIMIT);
+  if (q) {
+    metas = metas
+      .filter((m) => `${m.title} ${m.cwd} ${m.sessionId}`.toLowerCase().includes(q))
+      .slice(0, LIMIT);
+  }
   if (metas.length === 0) {
-    await ctx.reply("No saved sessions found in ~/.kiro/sessions/cli.");
+    await ctx.reply(q ? `No sessions match "${q}".` : "No saved sessions found in ~/.kiro/sessions/cli.");
     return;
   }
-  await ctx.reply("Recent sessions \u2014 tap to connect, \u{1F4DC} history, \u{1F4E1} watch live:", {
+  const header = q ? `Sessions matching "${q}"` : "Recent sessions";
+  await ctx.reply(`${header} \u2014 \u{1F7E2} active first \u00B7 tap to connect, \u{1F4DC} history, \u{1F4E1} watch:`, {
     reply_markup: buildKeyboard(metas),
   });
 }
 
 export function registerSessions(bot: Bot, deps: BotDeps): void {
-  bot.command("sessions", (ctx) => showSessions(ctx, deps));
+  bot.command("sessions", (ctx) => showSessions(ctx, deps, ctx.match?.toString()));
 
   bot.command("active", async (ctx) => {
     const metas = deps.store.listActive();

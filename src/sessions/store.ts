@@ -52,7 +52,10 @@ export class SessionStore {
       const meta = this.readMeta(file);
       if (meta) metas.push(meta);
     }
-    metas.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    // Active sessions first, then most-recently-updated.
+    metas.sort(
+      (a, b) => Number(b.active) - Number(a.active) || b.updatedAt.localeCompare(a.updatedAt),
+    );
     return metas.slice(0, limit);
   }
 

@@ -17,6 +17,7 @@ import { TailWatcher } from "../sessions/tail.js";
 import type { HistoryEntry } from "../sessions/types.js";
 import { formatToolCall } from "../render/tool-call.js";
 import { ResponseStreamer } from "../stream/streamer.js";
+import { extractImagePaths, sendImages } from "./image-return.js";
 import { buildContentBlocks, mergeInputs } from "./prompt-content.js";
 import { sendMarkdownDoc } from "./telegram-io.js";
 import { TypingIndicator } from "./typing.js";
@@ -46,6 +47,9 @@ export class SessionRuntime {
   private streamer: ResponseStreamer | undefined;
   private readonly typing: TypingIndicator;
   private shownToolIds = new Set<string>();
+  private turnStartedAt = 0;
+  private imageScanText = "";
+  private sentImagesThisTurn = new Set<string>();
   private readonly listener: (sessionId: string, update: SessionUpdate) => void;
   private primingContext: string | undefined;
   private watcher: TailWatcher | undefined;
@@ -300,6 +304,9 @@ export class SessionRuntime {
     this.typing.start();
     this.changed();
     const startedAt = Date.now();
+    this.turnStartedAt = startedAt;
+    this.imageScanText = "";
+    this.sentImagesThisTurn = new Set();
 
     const content = buildContentBlocks(input, {
       reasoning: reasoningDirective(this.reasoning),
@@ -310,6 +317,7 @@ export class SessionRuntime {
     try {
       const result = await this.acp.prompt(this.sessionId!, content);
       await this.streamer.finalize();
+      await this.sendTurnImages();
       await this.notify(this.completionLine(result.stopReason, startedAt));
     } catch (err) {
       await this.streamer?.finalize().catch(() => {});
@@ -322,6 +330,22 @@ export class SessionRuntime {
     }
 
     await this.flushQueue();
+  }
+
+  /** Send any fresh images the agent produced this turn (screenshots, etc.). */
+  private async sendTurnImages(): Promise<void> {
+    if (!this.cfg.sendAgentImages || !this.imageScanText) return;
+    const paths = extractImagePaths(this.imageScanText, this.cwd);
+    if (paths.length === 0) return;
+    try {
+      await sendImages(this.api, this.chatId, paths, {
+        since: this.turnStartedAt,
+        already: this.sentImagesThisTurn,
+        max: this.cfg.agentImagesMax,
+      });
+    } catch {
+      /* non-fatal */
+    }
   }
 
   /** Build the "turn finished" line shown after every turn. */
@@ -349,7 +373,10 @@ export class SessionRuntime {
     const kind = update.sessionUpdate;
     if (kind === "agent_message_chunk") {
       const text = update.content?.text;
-      if (typeof text === "string") this.streamer.appendOutput(text);
+      if (typeof text === "string") {
+        this.streamer.appendOutput(text);
+        this.imageScanText += text;
+      }
       return;
     }
     if (kind === "agent_thought_chunk") {
@@ -358,6 +385,8 @@ export class SessionRuntime {
       return;
     }
     if (kind === "tool_call" || kind === "tool_call_update") {
+      if (update.rawInput) this.imageScanText += " " + JSON.stringify(update.rawInput);
+      if (update.title) this.imageScanText += " " + update.title;
       if (!this.cfg.showToolCalls) return;
       const id = update.toolCallId || `${kind}:${update.title ?? ""}`;
       if (this.shownToolIds.has(id)) return;

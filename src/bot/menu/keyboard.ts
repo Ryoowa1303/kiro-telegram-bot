@@ -14,6 +14,7 @@ export const FIXED = {
   status: "\u{1F4CA} Status",
   newSession: "\u{1F195} New",
   stop: "\u23F9 Stop",
+  killAll: "\u{1F6D1} Kill all",
 };
 export const FIXED_LABELS = Object.values(FIXED);
 export const STATEFUL_RE = /^(\u{1F4C1}|\u{1F916}|\u{1F9E0}|\u{1F9E9})\s/u;
@@ -37,6 +38,8 @@ export function mainKeyboard(s: ChatSettings, projectName?: string): Keyboard {
     .text(FIXED.status)
     .text(FIXED.newSession)
     .text(FIXED.stop)
+    .row()
+    .text(FIXED.killAll)
     .resized()
     .persistent();
 }

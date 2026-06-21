@@ -135,8 +135,9 @@ Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
 ```
 /menu         Show the persistent menu keyboard
 /projects     List projects · /projects <q> search · /projects new <name>
-/sessions     List & resume recent sessions
+/sessions     List & resume sessions (active first) · /sessions <q> to filter
 /active       Sessions running now on the PC
+/killall      Kill all active sessions on the PC (with confirm)
 /tasks        Manage scheduled tasks
 /newtask      Create a scheduled task (wizard)
 /history      Show recent conversation history
@@ -191,6 +192,10 @@ Send one or several photos — including a Telegram **album** — with an option
 caption. The bot downloads them and attaches them all to the prompt as image
 content blocks, so the agent can analyze them together. Images sent while Kiro
 is busy are queued with your next turn.
+
+**Images come back too:** when the agent produces images during a turn (e.g.
+takes screenshots while testing an app), the bot detects the freshly-written
+files and sends them back to Telegram automatically (`SEND_AGENT_IMAGES`).
 
 ## 🎙 Sending voice
 

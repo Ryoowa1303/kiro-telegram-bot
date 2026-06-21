@@ -10,6 +10,7 @@ import { REASONING_LEVELS, type ReasoningEffort } from "../../app/types.js";
 import type { BotDeps } from "../deps.js";
 import { FIXED, FIXED_LABELS, PREFIX, STATEFUL_RE } from "../menu/keyboard.js";
 import { refreshMenu } from "../menu/refresh.js";
+import { showKillConfirm } from "./kill.js";
 import { showProjects } from "./projects.js";
 import { showSessions } from "./sessions.js";
 import { showTasks } from "./tasks.js";
@@ -51,6 +52,8 @@ export function registerMenu(bot: Bot, deps: BotDeps): void {
         }
       case FIXED.stop:
         return void ctx.reply((await rt.cancel()) ? "\u23F9 Cancelling\u2026" : "Nothing is running.");
+      case FIXED.killAll:
+        return showKillConfirm(ctx, deps);
     }
   });
 
