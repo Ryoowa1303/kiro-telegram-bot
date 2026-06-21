@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The latest section is published verbatim as the GitHub Release notes by
 `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed.
 
+## [1.4.0] - Unreleased
+
+> Staging section for the next release. New features land on `release/v1.4.0`
+> via PRs and ship to `main` when the release is cut.
+
+### Verified
+
+- Re-reviewed the transient-error auto-retry path end-to-end — error
+  classification (`isTransientAcpError`), the `6s → 12s → 24s → 48s → 60s`
+  backoff schedule, the "only retry while nothing has streamed" guard, and the
+  cancellable backoff waits — and confirmed it is logically complete and
+  correct. Shipped in 1.3.0; carried into this release.
+
+### Added
+
+- _(in progress — more features pending before this release is cut)_
+
 ## [1.3.0] - 2026-06-21
 
 ### Added
