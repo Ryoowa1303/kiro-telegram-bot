@@ -354,11 +354,12 @@ export class SessionRuntime {
       if (this.foreground) {
         await this.sendTurnImages();
         if (outcome.result || this.cancelled) {
-          await this.notify(this.completionLine(outcome.result?.stopReason, startedAt));
+          await this.notify(this.completionLine(outcome.result?.stopReason, startedAt), { loud: true });
         } else if (outcome.error) {
           const transient = isTransientAcpError(outcome.error);
           await this.notify(
             formatErrorSummary(outcome.error, fmtDuration(Date.now() - startedAt), outcome.attempts, transient),
+            { loud: true },
           );
         }
       }
@@ -366,7 +367,9 @@ export class SessionRuntime {
       // Unexpected failure outside the prompt path (e.g. while finalizing).
       await this.streamer?.finalize().catch(() => {});
       if (this.foreground) {
-        await this.notify(`\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`);
+        await this.notify(`\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`, {
+          loud: true,
+        });
       }
     } finally {
       this.typing.stop();
@@ -507,9 +510,9 @@ export class SessionRuntime {
     }
   }
 
-  private async notify(text: string): Promise<void> {
+  private async notify(text: string, opts?: { loud?: boolean }): Promise<void> {
     try {
-      await this.api.sendMessage(this.chatId, text);
+      await this.api.sendMessage(this.chatId, text, opts?.loud ? { disable_notification: false } : {});
     } catch {
       /* non-fatal */
     }

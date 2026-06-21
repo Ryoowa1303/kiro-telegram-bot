@@ -64,6 +64,7 @@ export interface AppConfig {
   acpAutoRestart: boolean;
   dataDir: string;
   promptIdleMs: number;
+  quietNotifications: boolean;
   promptRetryAttempts: number;
   sttApiUrl?: string;
   sttApiKey?: string;
@@ -117,6 +118,7 @@ export function loadConfig(): AppConfig {
     logFile,
     acpAutoRestart: bool(process.env.ACP_AUTO_RESTART, true),
     promptIdleMs: num(process.env.PROMPT_IDLE_TIMEOUT_MS, 900_000),
+    quietNotifications: bool(process.env.QUIET_NOTIFICATIONS, true),
     promptRetryAttempts: nonNegNum(process.env.PROMPT_RETRY_ATTEMPTS, 5),
     dataDir: process.env.DATA_DIR?.trim()
       ? resolve(expandHome(process.env.DATA_DIR.trim()))

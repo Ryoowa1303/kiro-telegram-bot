@@ -47,6 +47,16 @@ export async function showRunning(ctx: Context, deps: BotDeps): Promise<void> {
   await ctx.reply(text, { reply_markup: kb });
 }
 
+/** Switch the chat to a session and show its summary + unread. */
+export async function switchAndShow(ctx: Context, deps: BotDeps, sessionId: string): Promise<void> {
+  const res = await deps.registry.controller(ctx.chat!.id).switchTo(sessionId);
+  if (!res) {
+    await ctx.reply("Session not found (it may have been closed).");
+    return;
+  }
+  await deliverSwitch(ctx, deps, res);
+}
+
 export function registerRunning(bot: Bot, deps: BotDeps): void {
   bot.command("running", (ctx) => showRunning(ctx, deps));
 
@@ -54,12 +64,7 @@ export function registerRunning(bot: Bot, deps: BotDeps): void {
 
   bot.callbackQuery(new RegExp(`^run:switch:${UUID}$`), async (ctx) => {
     await ctx.answerCallbackQuery();
-    const res = await deps.registry.controller(ctx.chat!.id).switchTo(ctx.match![1]!);
-    if (!res) {
-      await ctx.reply("Session not found (it may have been closed).");
-      return;
-    }
-    await deliverSwitch(ctx, deps, res);
+    await switchAndShow(ctx, deps, ctx.match![1]!);
   });
 
   bot.callbackQuery(new RegExp(`^run:close:${UUID}$`), async (ctx) => {
