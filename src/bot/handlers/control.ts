@@ -6,8 +6,9 @@ import { basename } from "node:path";
 import { textPrompt } from "../../app/types.js";
 import type { BotDeps } from "../deps.js";
 import { HELP_TEXT } from "../commands.js";
-import { mainKeyboard } from "../menu/keyboard.js";
+import { compactKeyboard } from "../menu/keyboard.js";
 import { refreshMenu } from "../menu/refresh.js";
+import { openMainMenu } from "./menu.js";
 
 export function registerControl(bot: Bot, deps: BotDeps): void {
   bot.command("start", async (ctx) => {
@@ -16,18 +17,18 @@ export function registerControl(bot: Bot, deps: BotDeps): void {
     const lines = [
       "\u{1F44B} Welcome! I bridge Telegram to Kiro CLI over ACP.",
       agent?.name ? `Connected to ${agent.name} ${agent.version ?? ""}`.trim() : "",
-      `Workspace: ${rt.projectName ?? rt.cwd}`,
       "",
-      "Use the menu below, or just send a message. The pinned panel above",
-      "always shows your project, agent, reasoning and model.",
+      "Tap \u2630 Menu for everything. The pinned panel above always shows your",
+      "project, agent, reasoning and model. Just send a message to start.",
     ].filter(Boolean);
-    await ctx.reply(lines.join("\n"), {
-      reply_markup: mainKeyboard(deps.settings.get(ctx.chat.id), rt.projectName),
-    });
+    await ctx.reply(lines.join("\n"), { reply_markup: compactKeyboard() });
     await deps.statusPanel.refresh(ctx.chat.id);
   });
 
-  bot.command("menu", (ctx) => refreshMenu(ctx, deps, "\u2328\uFE0F Menu ready."));
+  bot.command("menu", async (ctx) => {
+    await openMainMenu(ctx, deps);
+    await deps.statusPanel.refresh(ctx.chat.id);
+  });
 
   bot.command("help", async (ctx) => {
     await ctx.reply(HELP_TEXT);
@@ -49,8 +50,8 @@ export function registerControl(bot: Bot, deps: BotDeps): void {
   bot.command("new", async (ctx) => {
     const rt = deps.registry.get(ctx.chat.id);
     try {
-      await rt.startNewSession(rt.cwd, rt.projectName);
-      await ctx.reply(`\u2728 New session started in ${rt.cwd}`);
+      await deps.registry.controller(ctx.chat.id).addNew(rt.cwd, rt.projectName);
+      await refreshMenu(ctx, deps, `\u2728 New session started in ${rt.projectName ?? rt.cwd}`);
     } catch (err) {
       await ctx.reply(`\u274C Could not start session: ${(err as Error).message}`);
     }

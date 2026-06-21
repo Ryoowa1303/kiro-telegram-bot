@@ -137,6 +137,7 @@ Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
 /projects     List projects · /projects <q> search · /projects new <name>
 /sessions     List & resume sessions (active first) · /sessions <q> to filter
 /active       Sessions running now on the PC
+/running      Sessions this chat controls — switch between them
 /killall      Kill all active sessions on the PC (with confirm)
 /tasks        Manage scheduled tasks
 /newtask      Create a scheduled task (wizard)
@@ -162,14 +163,17 @@ running, your messages are queued and sent automatically when it finishes.
 
 ## 🧭 The menu & status panel
 
-A **persistent reply keyboard** sits under the message box with quick actions:
-Project · Agent · Reasoning · Model · Sessions · Tasks · Status · New · Stop.
+A tiny **persistent bar** sits under the message box — **☰ Menu · 🧭 Running ·
+⏹ Stop** — so common actions are one tap away without clutter. Tap **☰ Menu**
+(or `/menu`) to open a clean, grouped **inline menu**: Project · New · Running ·
+Sessions · Agent · Model · Reasoning · Tasks · Status · Usage · Stop · Kill all.
+The bar can be hidden (🙈) and restored (⌨️ Show bar or `/menu`).
 
 A **pinned status panel** at the top of the chat always shows your current
-**project, agent, reasoning effort, model, session id, activity and queue**,
-and updates live as things change. Tap **Agent**, **Reasoning** or **Model** to
-change them from inline menus (reasoning steers how thoroughly the agent works:
-Minimal → Max).
+**project, agent, reasoning effort, model, session id, context %, activity and
+queue** (and how many sessions the chat controls), updating live. Pick **Agent**,
+**Reasoning** or **Model** from the inline menu (reasoning steers how thoroughly
+the agent works: Minimal → Max).
 
 ## ⏰ Scheduled tasks
 
@@ -205,6 +209,17 @@ prompt. Configure any OpenAI/Whisper-compatible endpoint via `STT_API_URL` in
 Romanian/Moldovan, and ~100 more).
 
 ---
+
+## 🧭 Working on several sessions at once
+
+One chat can drive **multiple Kiro sessions** and switch between them. Start a
+session (📁 Project / 🆕 New), and each becomes a "controlled" session. Tap
+**🧭 Running** (or `/running`) to switch: the foreground session streams live
+while the others keep working quietly. When you switch to a session you see its
+recent context and **every message that arrived while you were away** (its
+unread, recovered from the session log). Leave a task running in A, hop to B,
+reply, and come back to A to read what it did. Close a session with ✖ (it isn't
+killed — see `/killall` for that).
 
 ## 🔗 Connecting to live sessions
 

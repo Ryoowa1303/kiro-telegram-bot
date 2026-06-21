@@ -8,54 +8,45 @@ import { type Bot, type Context, InlineKeyboard } from "grammy";
 import { reasoningLabel } from "../../app/reasoning.js";
 import { REASONING_LEVELS, type ReasoningEffort } from "../../app/types.js";
 import type { BotDeps } from "../deps.js";
-import { FIXED, FIXED_LABELS, PREFIX, STATEFUL_RE } from "../menu/keyboard.js";
+import { BAR_LABELS, compactKeyboard, mainMenuInline, MENU_BTN, RUNNING_BTN, STOP_BTN } from "../menu/keyboard.js";
 import { refreshMenu } from "../menu/refresh.js";
 import { showKillConfirm } from "./kill.js";
 import { showProjects } from "./projects.js";
+import { showRunning } from "./running.js";
 import { showSessions } from "./sessions.js";
 import { showTasks } from "./tasks.js";
+import { showUsage } from "./usage.js";
+
+/** Open the full inline menu, showing the current agent/model/reasoning. */
+export async function openMainMenu(ctx: Context, deps: BotDeps): Promise<void> {
+  const rt = deps.registry.get(ctx.chat!.id);
+  await ctx.reply("\u2699\uFE0F Menu", {
+    reply_markup: mainMenuInline({
+      agent: rt.agent || "default",
+      model: rt.model || "default",
+      reasoning: reasoningLabel(rt.reasoning),
+    }),
+  });
+}
 
 export function registerMenu(bot: Bot, deps: BotDeps): void {
-  // Stateful buttons (Project / Agent / Reasoning / Model) — matched by emoji.
-  bot.hears(STATEFUL_RE, async (ctx) => {
+  // Compact persistent bar.
+  bot.hears(BAR_LABELS, async (ctx) => {
     deps.wizard.abort(ctx.chat.id);
-    switch (ctx.match[1]) {
-      case PREFIX.project:
-        return showProjects(ctx, deps);
-      case PREFIX.agent:
-        return showAgentMenu(ctx, deps);
-      case PREFIX.reasoning:
-        return showReasoningMenu(ctx, deps);
-      case PREFIX.model:
-        return showModelMenu(ctx, deps);
+    switch (ctx.message?.text) {
+      case MENU_BTN:
+        return openMainMenu(ctx, deps);
+      case RUNNING_BTN:
+        return showRunning(ctx, deps);
+      case STOP_BTN: {
+        const rt = deps.registry.get(ctx.chat.id);
+        return void ctx.reply((await rt.cancel()) ? "\u23F9 Cancelling\u2026" : "Nothing is running.");
+      }
     }
   });
 
-  // Fixed action buttons.
-  bot.hears(FIXED_LABELS, async (ctx) => {
-    deps.wizard.abort(ctx.chat.id);
-    const rt = deps.registry.get(ctx.chat.id);
-    switch (ctx.message?.text) {
-      case FIXED.sessions:
-        return showSessions(ctx, deps);
-      case FIXED.tasks:
-        return showTasks(ctx, deps);
-      case FIXED.status:
-        await deps.statusPanel.refresh(ctx.chat.id);
-        return void ctx.reply(deps.statusPanel.render(ctx.chat.id));
-      case FIXED.newSession:
-        try {
-          await rt.startNewSession(rt.cwd, rt.projectName);
-          return refreshMenu(ctx, deps, `\u2728 New session started in ${rt.projectName ?? rt.cwd}`);
-        } catch (e) {
-          return void ctx.reply(`\u274C ${(e as Error).message}`);
-        }
-      case FIXED.stop:
-        return void ctx.reply((await rt.cancel()) ? "\u23F9 Cancelling\u2026" : "Nothing is running.");
-      case FIXED.killAll:
-        return showKillConfirm(ctx, deps);
-    }
-  });
+  // Inline menu actions.
+  bot.callbackQuery(/^m:(\w+)$/, (ctx) => dispatchMenu(ctx, deps, ctx.match![1]!));
 
   // ── Agent (real Kiro modes) ─────────────────────────────────────────────
   bot.callbackQuery(/^agent:set:(\d+)$/, async (ctx) => {
@@ -85,14 +76,78 @@ export function registerMenu(bot: Bot, deps: BotDeps): void {
   });
 }
 
+/** Dispatch an inline-menu action (`m:<action>`). */
+async function dispatchMenu(ctx: Context, deps: BotDeps, action: string): Promise<void> {
+  const chatId = ctx.chat!.id;
+  const rt = deps.registry.get(chatId);
+  switch (action) {
+    case "close":
+      await ctx.answerCallbackQuery();
+      return void ctx.deleteMessage().catch(() => {});
+    case "hidebar":
+      await ctx.answerCallbackQuery();
+      await ctx.deleteMessage().catch(() => {});
+      return void ctx.reply("\u{1F648} Bar hidden \u2014 send /menu to bring it back.", {
+        reply_markup: { remove_keyboard: true },
+      });
+    case "showbar":
+      await ctx.answerCallbackQuery();
+      return void ctx.reply("\u2328\uFE0F Bar restored.", { reply_markup: compactKeyboard() });
+    case "project":
+      await ctx.answerCallbackQuery();
+      return showProjects(ctx, deps);
+    case "running":
+      await ctx.answerCallbackQuery();
+      return showRunning(ctx, deps);
+    case "sessions":
+      await ctx.answerCallbackQuery();
+      return showSessions(ctx, deps);
+    case "tasks":
+      await ctx.answerCallbackQuery();
+      return showTasks(ctx, deps);
+    case "agent":
+      await ctx.answerCallbackQuery();
+      return showAgentMenu(ctx, deps);
+    case "model":
+      await ctx.answerCallbackQuery();
+      return showModelMenu(ctx, deps);
+    case "reasoning":
+      await ctx.answerCallbackQuery();
+      return showReasoningMenu(ctx, deps);
+    case "status":
+      await ctx.answerCallbackQuery();
+      await deps.statusPanel.refresh(chatId);
+      return void ctx.reply(deps.statusPanel.render(chatId));
+    case "usage":
+      await ctx.answerCallbackQuery();
+      return showUsage(ctx, deps);
+    case "killall":
+      await ctx.answerCallbackQuery();
+      return showKillConfirm(ctx, deps);
+    case "new":
+      await ctx.answerCallbackQuery();
+      try {
+        await deps.registry.controller(chatId).addNew(rt.cwd, rt.projectName);
+        return refreshMenu(ctx, deps, `\u2728 New session in ${rt.projectName ?? rt.cwd}`);
+      } catch (e) {
+        return void ctx.reply(`\u274C ${(e as Error).message}`);
+      }
+    case "stop":
+      return void ctx.answerCallbackQuery({ text: (await rt.cancel()) ? "Cancelling\u2026" : "Nothing is running" });
+    default:
+      return void ctx.answerCallbackQuery();
+  }
+}
+
 async function confirm(ctx: Context, deps: BotDeps, text: string): Promise<void> {
-  await ctx.answerCallbackQuery();
+  await ctx.answerCallbackQuery({ text });
   try {
     await ctx.deleteMessage();
   } catch {
     /* ignore */
   }
-  await refreshMenu(ctx, deps, text);
+  await deps.statusPanel.refresh(ctx.chat!.id);
+  await openMainMenu(ctx, deps); // reopen so the new value is visible
 }
 
 async function showAgentMenu(ctx: Context, deps: BotDeps): Promise<void> {

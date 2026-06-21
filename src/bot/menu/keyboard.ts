@@ -1,45 +1,46 @@
 /**
- * The always-visible reply keyboard. Stateful buttons (Project / Agent /
- * Reasoning / Model) show the CURRENT value and are matched by their emoji
- * prefix; the rest are fixed actions.
+ * Menu surfaces:
+ *  - a tiny PERSISTENT bar (☰ Menu · 🧭 Running · ⏹ Stop) — minimal footprint;
+ *  - a full, organized INLINE menu opened on demand (and hideable).
+ * Live state (project/agent/model/reasoning/context) lives in the pinned panel,
+ * so the bar stays clean.
  */
-import { Keyboard } from "grammy";
-import { reasoningLabel } from "../../app/reasoning.js";
-import type { ChatSettings } from "../../app/types.js";
+import { InlineKeyboard, Keyboard } from "grammy";
 
-export const PREFIX = { project: "\u{1F4C1}", agent: "\u{1F916}", reasoning: "\u{1F9E0}", model: "\u{1F9E9}" };
-export const FIXED = {
-  sessions: "\u{1F5C2} Sessions",
-  tasks: "\u2705 Tasks",
-  status: "\u{1F4CA} Status",
-  newSession: "\u{1F195} New",
-  stop: "\u23F9 Stop",
-  killAll: "\u{1F6D1} Kill all",
-};
-export const FIXED_LABELS = Object.values(FIXED);
-export const STATEFUL_RE = /^(\u{1F4C1}|\u{1F916}|\u{1F9E0}|\u{1F9E9})\s/u;
+export const MENU_BTN = "\u2630 Menu"; // ☰
+export const RUNNING_BTN = "\u{1F9ED} Running";
+export const STOP_BTN = "\u23F9 Stop";
+export const BAR_LABELS = [MENU_BTN, RUNNING_BTN, STOP_BTN];
 
-function trunc(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + "\u2026" : s;
+/** The always-visible compact bar. */
+export function compactKeyboard(): Keyboard {
+  return new Keyboard().text(MENU_BTN).text(RUNNING_BTN).text(STOP_BTN).resized().persistent();
 }
 
-export function mainKeyboard(s: ChatSettings, projectName?: string): Keyboard {
-  const proj = projectName || s.projectName || "Project";
-  return new Keyboard()
-    .text(`${PREFIX.project} ${trunc(proj, 18)}`)
-    .text(`${PREFIX.agent} ${trunc(s.agent || "default", 16)}`)
+/** The full, grouped inline menu (opened via ☰ Menu or /menu). */
+export function mainMenuInline(state: { agent: string; model: string; reasoning: string }): InlineKeyboard {
+  const t = (s: string, n: number): string => (s.length > n ? s.slice(0, n - 1) + "\u2026" : s);
+  return new InlineKeyboard()
+    .text("\u{1F4C1} Project", "m:project")
+    .text("\u{1F195} New", "m:new")
     .row()
-    .text(`${PREFIX.reasoning} ${reasoningLabel(s.reasoning)}`)
-    .text(`${PREFIX.model} ${s.model ? trunc(s.model, 16) : "Model"}`)
+    .text("\u{1F9ED} Running", "m:running")
+    .text("\u{1F5C2} Sessions", "m:sessions")
     .row()
-    .text(FIXED.sessions)
-    .text(FIXED.tasks)
+    .text(`\u{1F916} Agent \u00B7 ${t(state.agent, 24)}`, "m:agent")
     .row()
-    .text(FIXED.status)
-    .text(FIXED.newSession)
-    .text(FIXED.stop)
+    .text(`\u{1F9E9} Model \u00B7 ${t(state.model, 24)}`, "m:model")
     .row()
-    .text(FIXED.killAll)
-    .resized()
-    .persistent();
+    .text(`\u{1F9E0} Reasoning \u00B7 ${t(state.reasoning, 24)}`, "m:reasoning")
+    .row()
+    .text("\u2705 Tasks", "m:tasks")
+    .text("\u{1F4CA} Status", "m:status")
+    .text("\u{1F4B3} Usage", "m:usage")
+    .row()
+    .text("\u23F9 Stop", "m:stop")
+    .text("\u{1F6D1} Kill all", "m:killall")
+    .row()
+    .text("\u2328\uFE0F Show bar", "m:showbar")
+    .text("\u{1F648} Hide bar", "m:hidebar")
+    .text("\u2716 Close", "m:close");
 }
