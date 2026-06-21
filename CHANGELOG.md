@@ -31,6 +31,15 @@ The latest section is published verbatim as the GitHub Release notes by
   Each running session shows a busy/unread badge; close one with ✖ (it isn't
   killed). The status panel shows how many sessions the chat controls.
 
+### Changed
+
+- **🎛 Redesigned menu** — replaced the bulky multi-row reply keyboard with a
+  tiny persistent bar (**☰ Menu · 🧭 Running · ⏹ Stop**) plus a clean, grouped
+  **inline menu** opened on demand. The menu can be hidden (🙈) and restored
+  (`/menu` or ⌨️ Show bar). Live state (project/agent/model/reasoning/context)
+  now lives solely in the pinned status panel, keeping the input area uncluttered.
+
+
 ## [1.3.0] - 2026-06-21
 
 ### Added
