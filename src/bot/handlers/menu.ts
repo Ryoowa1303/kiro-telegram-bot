@@ -6,7 +6,7 @@
  */
 import { type Bot, type Context, InlineKeyboard } from "grammy";
 import { reasoningLabel } from "../../app/reasoning.js";
-import { REASONING_LEVELS, type ReasoningEffort } from "../../app/types.js";
+import { REASONING_LEVELS, type ReasoningEffort, VALID_MODELS } from "../../app/types.js";
 import type { BotDeps } from "../deps.js";
 import { FIXED, FIXED_LABELS, PREFIX, STATEFUL_RE } from "../menu/keyboard.js";
 import { refreshMenu } from "../menu/refresh.js";
@@ -14,9 +14,8 @@ import { showProjects } from "./projects.js";
 import { showSessions } from "./sessions.js";
 import { showTasks } from "./tasks.js";
 
-// Real Kiro model ids (Kiro doesn't enumerate them over ACP; these are the
-// supported Claude 4 family ids). "auto" lets the agent's default model apply.
-const MODELS = ["auto", "claude-opus-4.8", "claude-sonnet-4.5", "claude-sonnet-4", "claude-haiku-4.5"];
+// "auto" = the agent's default model; the rest are verified Kiro model ids.
+const MODELS = ["auto", ...VALID_MODELS];
 
 export function registerMenu(bot: Bot, deps: BotDeps): void {
   // Stateful buttons (Project / Agent / Reasoning / Model) — matched by emoji.

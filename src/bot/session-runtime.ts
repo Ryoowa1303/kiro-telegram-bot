@@ -10,7 +10,7 @@ import type { SessionUpdate } from "../acp/types.js";
 import type { AppConfig } from "../config.js";
 import { reasoningDirective } from "../app/reasoning.js";
 import type { SettingsStore } from "../app/settings-store.js";
-import { type PromptInput, type ReasoningEffort, textPrompt } from "../app/types.js";
+import { type PromptInput, type ReasoningEffort, isValidModel, textPrompt } from "../app/types.js";
 import { createLogger } from "../logger.js";
 import { buildTranscript } from "../sessions/history.js";
 import { TailWatcher } from "../sessions/tail.js";
@@ -63,6 +63,7 @@ export class SessionRuntime {
     this.cwd = s.projectPath ?? cfg.workspace;
     this.projectName = s.projectName;
     this.sessionId = s.sessionId;
+    if (s.model && !isValidModel(s.model)) settings.update(chatId, { model: "" });
     if (this.sessionId) this.rebindPending = true; // lazily reload on first use
 
     this.typing = new TypingIndicator(api, chatId);
@@ -167,6 +168,9 @@ export class SessionRuntime {
   // ── preferences ──────────────────────────────────────────────────────────
 
   async setModelPref(modelId: string): Promise<{ ok: boolean; error?: string }> {
+    if (modelId && !isValidModel(modelId)) {
+      return { ok: false, error: `unknown model: ${modelId}` };
+    }
     this.settings.update(this.chatId, { model: modelId });
     if (this.sessionId && modelId) {
       try {
@@ -199,19 +203,25 @@ export class SessionRuntime {
 
   private async applySessionPrefs(): Promise<void> {
     const s = this.settings.get(this.chatId);
+    // Drop any invalid persisted model (an invalid id silently breaks prompts).
+    if (s.model && !isValidModel(s.model)) {
+      log.warn(`clearing invalid persisted model "${s.model}" for chat ${this.chatId}`);
+      this.settings.update(this.chatId, { model: "" });
+    }
+    const cur = this.settings.get(this.chatId);
     // Adopt the session's current agent (mode) when the user hasn't chosen one.
-    if (!s.agent && this.acp.currentModeId) {
+    if (!cur.agent && this.acp.currentModeId) {
       this.settings.update(this.chatId, { agent: this.acp.currentModeId });
-    } else if (this.sessionId && s.agent && this.acp.hasMode(s.agent) && s.agent !== this.acp.currentModeId) {
+    } else if (this.sessionId && cur.agent && this.acp.hasMode(cur.agent) && cur.agent !== this.acp.currentModeId) {
       try {
-        await this.acp.setMode(this.sessionId, s.agent);
+        await this.acp.setMode(this.sessionId, cur.agent);
       } catch (e) {
         log.debug(`apply agent failed: ${(e as Error).message}`);
       }
     }
-    if (this.sessionId && s.model) {
+    if (this.sessionId && cur.model && isValidModel(cur.model)) {
       try {
-        await this.acp.setModel(this.sessionId, s.model);
+        await this.acp.setModel(this.sessionId, cur.model);
       } catch (e) {
         log.debug(`apply model failed: ${(e as Error).message}`);
       }
