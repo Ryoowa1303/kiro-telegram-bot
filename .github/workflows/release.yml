@@ -80,18 +80,18 @@ jobs:
             echo "Release $VERSION. See CHANGELOG.md for details." > "$NOTES_FILE"
           fi
           # Always append the 1-click install footer + link to the install guide.
-          cat >> "$NOTES_FILE" <<'EOF'
-
----
-
-### 📦 Install (1-click)
-
-1. Download the **`kiro-telegram-bot-<version>.zip`** from the assets below and unzip it.
-2. **Windows:** double-click `install.cmd` · **Linux/macOS:** `chmod +x install.sh && ./install.sh`
-3. Set `ALLOWED_USERS` in `.env` to your Telegram user ID.
-
-📖 Full install guide: https://github.com/${{ github.repository }}/blob/main/docs/INSTALL.md
-EOF
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "### 📦 Install (1-click)"
+            echo ""
+            echo '1. Download the **`kiro-telegram-bot-<version>.zip`** from the assets below and unzip it.'
+            echo '2. **Windows:** double-click `install.cmd` · **Linux/macOS:** `chmod +x install.sh && ./install.sh`'
+            echo '3. Set `ALLOWED_USERS` in `.env` to your Telegram user ID.'
+            echo ""
+            echo "📖 Full install guide: https://github.com/${{ github.repository }}/blob/main/docs/INSTALL.md"
+          } >> "$NOTES_FILE"
           echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
           echo "----- release notes -----"
           cat "$NOTES_FILE"
