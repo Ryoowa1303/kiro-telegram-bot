@@ -7,6 +7,7 @@ import type { AcpClient } from "../acp/client.js";
 import type { SettingsStore } from "../app/settings-store.js";
 import type { AppConfig } from "../config.js";
 import type { SttService } from "../app/stt.js";
+import type { UsageService } from "../app/usage.js";
 import type { ProjectEntry, ProjectManager } from "../projects/manager.js";
 import type { SessionStore } from "../sessions/store.js";
 import type { TaskRunner } from "../tasks/runner.js";
@@ -29,6 +30,7 @@ export interface BotDeps {
   taskRunner: TaskRunner;
   wizard: TaskWizard;
   stt: SttService;
+  usage: UsageService;
 }
 
 /** Caches the last project list shown per chat for callback resolution. */

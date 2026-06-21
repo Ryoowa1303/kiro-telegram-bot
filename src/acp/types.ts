@@ -92,6 +92,10 @@ export interface SessionNotificationParams {
 /** Permission request from the agent (server -> client). */
 export interface RequestPermissionParams {
   sessionId: string;
-  toolCall?: { toolCallId?: string; title?: string; kind?: string };
+  toolCall?: { toolCallId?: string; title?: string; kind?: string; rawInput?: Record<string, unknown> };
   options: Array<{ optionId: string; name: string; kind?: string }>;
 }
+
+export type PermissionOutcome =
+  | { outcome: { outcome: "selected"; optionId: string } }
+  | { outcome: { outcome: "cancelled" } };

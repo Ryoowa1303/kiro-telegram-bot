@@ -14,7 +14,9 @@ import type {
   ContentBlock,
   InitializeResult,
   JsonRpcMessage,
+  PermissionOutcome,
   PromptResult,
+  RequestPermissionParams,
   SessionNotificationParams,
   SessionUpdate,
 } from "./types.js";
@@ -28,12 +30,16 @@ export interface AcpClientOptions {
   agent?: string;
   requestTimeoutMs?: number;
   autoRestart?: boolean;
+  /** Reject a prompt only after this long with no streaming activity. */
+  promptIdleTimeoutMs?: number;
+  /** Absolute safety cap for a single prompt. */
+  promptMaxMs?: number;
 }
 
 interface Pending {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
-  timer: NodeJS.Timeout;
+  cleanup: () => void;
   method: string;
 }
 
@@ -54,6 +60,10 @@ export class AcpClient extends EventEmitter {
   private nextId = 1;
   private readonly pending = new Map<number | string, Pending>();
   private readonly timeout: number;
+  private readonly promptIdleMs: number;
+  private readonly promptMaxMs: number;
+  /** Last time we saw streaming activity for a session (epoch ms). */
+  private readonly lastActivity = new Map<string, number>();
   private stopped = false;
   private restartAttempts = 0;
   private restartTimer?: NodeJS.Timeout;
@@ -67,11 +77,15 @@ export class AcpClient extends EventEmitter {
   currentModelId?: string;
   /** Latest metadata per session (context usage %, effort). */
   private readonly metadata = new Map<string, { contextUsagePercentage?: number; effort?: string }>();
+  /** Optional handler for tool permission requests (set by the bot layer). */
+  permissionHandler?: (params: RequestPermissionParams) => Promise<PermissionOutcome>;
 
   constructor(private readonly opts: AcpClientOptions) {
     super();
     this.setMaxListeners(0); // one session-update listener per chat runtime
-    this.timeout = opts.requestTimeoutMs ?? 600_000;
+    this.timeout = opts.requestTimeoutMs ?? 120_000;
+    this.promptIdleMs = opts.promptIdleTimeoutMs ?? 900_000; // 15 min with no activity
+    this.promptMaxMs = opts.promptMaxMs ?? 6 * 60 * 60_000; // 6 h hard cap
   }
 
   /** Spawn the process and run the ACP initialize handshake. */
@@ -176,11 +190,43 @@ export class AcpClient extends EventEmitter {
   }
 
   /** Send a prompt; resolves with the stop reason when the turn ends. */
+  /**
+   * Send a prompt. Resolves when the turn ends. Instead of a fixed timeout
+   * (which kills long turns), this rejects only after `promptIdleMs` with no
+   * streaming activity, or after the absolute `promptMaxMs` cap.
+   */
   async prompt(sessionId: string, content: ContentBlock[]): Promise<PromptResult> {
-    return (await this.request("session/prompt", {
-      sessionId,
-      prompt: content,
-    })) as PromptResult;
+    return new Promise<PromptResult>((resolve, reject) => {
+      const id = this.nextId++;
+      const start = Date.now();
+      this.lastActivity.set(sessionId, start);
+      const watch = setInterval(() => {
+        const idle = Date.now() - (this.lastActivity.get(sessionId) ?? start);
+        const total = Date.now() - start;
+        if (total > this.promptMaxMs) {
+          this.pending.delete(id);
+          clearInterval(watch);
+          reject(new Error(`Prompt exceeded the ${Math.round(this.promptMaxMs / 60_000)}min cap`));
+        } else if (idle > this.promptIdleMs) {
+          this.pending.delete(id);
+          clearInterval(watch);
+          reject(new Error(`No agent activity for ${Math.round(idle / 1000)}s — giving up`));
+        }
+      }, 15_000);
+      this.pending.set(id, {
+        resolve: (v) => resolve(v as PromptResult),
+        reject,
+        cleanup: () => clearInterval(watch),
+        method: "session/prompt",
+      });
+      try {
+        this.transport!.send({ jsonrpc: "2.0", id, method: "session/prompt", params: { sessionId, prompt: content } });
+      } catch (e) {
+        clearInterval(watch);
+        this.pending.delete(id);
+        reject(e as Error);
+      }
+    });
   }
 
   async cancel(sessionId: string): Promise<void> {
@@ -233,7 +279,7 @@ export class AcpClient extends EventEmitter {
         this.pending.delete(id);
         reject(new Error(`Timeout after ${this.timeout}ms: ${method}`));
       }, this.timeout);
-      this.pending.set(id, { resolve, reject, timer, method });
+      this.pending.set(id, { resolve, reject, cleanup: () => clearTimeout(timer), method });
       try {
         this.transport!.send({ jsonrpc: "2.0", id, method, params });
       } catch (e) {
@@ -248,7 +294,7 @@ export class AcpClient extends EventEmitter {
     // Response to one of our requests.
     if (msg.id !== undefined && msg.id !== null && this.pending.has(msg.id) && msg.method === undefined) {
       const p = this.pending.get(msg.id)!;
-      clearTimeout(p.timer);
+      p.cleanup();
       this.pending.delete(msg.id);
       if (msg.error) p.reject(new Error(msg.error.message || "ACP error"));
       else p.resolve(msg.result);
@@ -277,7 +323,12 @@ export class AcpClient extends EventEmitter {
       trustAllTools: this.opts.trustAllTools,
     };
     try {
-      const result = await handleServerRequest(method, params, handlerOpts);
+      let result: unknown;
+      if (method === "session/request_permission" && this.permissionHandler) {
+        result = await this.permissionHandler(params as unknown as RequestPermissionParams);
+      } else {
+        result = await handleServerRequest(method, params, handlerOpts);
+      }
       this.transport?.send({ jsonrpc: "2.0", id, result });
     } catch (err) {
       this.transport?.send({
@@ -292,6 +343,7 @@ export class AcpClient extends EventEmitter {
     if (method === "session/update") {
       const p = params as SessionNotificationParams;
       if (p?.sessionId && p.update) {
+        this.lastActivity.set(p.sessionId, Date.now()); // keeps long, active turns alive
         this.emit("session-update", p.sessionId, p.update);
         return;
       }
@@ -315,7 +367,7 @@ export class AcpClient extends EventEmitter {
 
   private failAllPending(err: Error): void {
     for (const [, p] of this.pending) {
-      clearTimeout(p.timer);
+      p.cleanup();
       p.reject(err);
     }
     this.pending.clear();

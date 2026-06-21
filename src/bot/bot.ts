@@ -7,6 +7,7 @@ import { Bot } from "grammy";
 import type { AcpClient } from "../acp/client.js";
 import { SettingsStore } from "../app/settings-store.js";
 import { SttService } from "../app/stt.js";
+import { UsageService } from "../app/usage.js";
 import type { AppConfig } from "../config.js";
 import { createLogger } from "../logger.js";
 import { ProjectManager } from "../projects/manager.js";
@@ -26,8 +27,10 @@ import { registerProjects } from "./handlers/projects.js";
 import { registerSessions } from "./handlers/sessions.js";
 import { registerSystem } from "./handlers/system.js";
 import { registerTasks, registerWizardInput } from "./handlers/tasks.js";
+import { registerUsage } from "./handlers/usage.js";
 import { registerVoice } from "./handlers/voice.js";
 import { StatusPanel } from "./menu/status-panel.js";
+import { PermissionService } from "./permission-service.js";
 import { RuntimeRegistry } from "./registry.js";
 import { TaskWizard } from "./wizard/task-wizard.js";
 
@@ -69,9 +72,20 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
       model: cfg.sttModel,
       language: cfg.sttLanguage,
     }),
+    usage: new UsageService(cfg.kiroCliPath),
   };
 
+  // Inline approvals: when NOT in trust-all mode, Kiro asks before risky tools.
+  const permissions = new PermissionService(bot.api, registry);
+  acp.permissionHandler = (p) => permissions.handle(p);
+
   bot.use(createAuthMiddleware(cfg));
+
+  bot.callbackQuery(/^perm:(\d+):(\d+)$/, async (ctx) => {
+    const label = permissions.resolveChoice(ctx.match![1]!, Number(ctx.match![2]));
+    await ctx.answerCallbackQuery({ text: label ?? "Expired" });
+    await ctx.editMessageText(label ? `\u{1F510} ${label}` : "\u{1F510} (expired)").catch(() => {});
+  });
 
   registerMenu(bot, deps); // persistent-keyboard buttons (hears)
   registerWizardInput(bot, deps); // wizard text input (before commands)
@@ -80,6 +94,7 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
   registerSessions(bot, deps);
   registerHistory(bot, deps);
   registerSystem(bot, deps);
+  registerUsage(bot, deps);
   registerTasks(bot, deps);
   registerPhotos(bot, deps); // photos & image documents
   registerVoice(bot, deps); // voice / audio -> transcription -> prompt

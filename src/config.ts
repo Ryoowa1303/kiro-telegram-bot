@@ -54,6 +54,7 @@ export interface AppConfig {
   logFile: string;
   acpAutoRestart: boolean;
   dataDir: string;
+  promptIdleMs: number;
   sttApiUrl?: string;
   sttApiKey?: string;
   sttModel: string;
@@ -103,6 +104,7 @@ export function loadConfig(): AppConfig {
     logsDir,
     logFile,
     acpAutoRestart: bool(process.env.ACP_AUTO_RESTART, true),
+    promptIdleMs: num(process.env.PROMPT_IDLE_TIMEOUT_MS, 900_000),
     dataDir: process.env.DATA_DIR?.trim()
       ? resolve(expandHome(process.env.DATA_DIR.trim()))
       : join(PROJECT_ROOT, "data"),

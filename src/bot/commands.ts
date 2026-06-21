@@ -12,6 +12,7 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "history", description: "Show recent conversation history" },
   { command: "new", description: "Start a fresh session here" },
   { command: "status", description: "Current session, project & queue" },
+  { command: "usage", description: "Account & context usage" },
   { command: "btw", description: "Queue a follow-up: /btw <text>" },
   { command: "flush", description: "Send queued follow-ups now" },
   { command: "queue", description: "Show queued follow-ups" },

@@ -28,6 +28,7 @@ async function main(): Promise<void> {
     trustAllTools: cfg.trustAllTools,
     agent: cfg.agent,
     autoRestart: cfg.acpAutoRestart,
+    promptIdleTimeoutMs: cfg.promptIdleMs,
   });
 
   await acp.start();

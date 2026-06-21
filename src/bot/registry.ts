@@ -37,4 +37,12 @@ export class RuntimeRegistry {
     for (const rt of this.runtimes.values()) rt.dispose();
     this.runtimes.clear();
   }
+
+  /** Find the chat that currently owns a given session id. */
+  findChatBySession(sessionId: string): number | undefined {
+    for (const [chatId, rt] of this.runtimes) {
+      if (rt.sessionId === sessionId) return chatId;
+    }
+    return undefined;
+  }
 }

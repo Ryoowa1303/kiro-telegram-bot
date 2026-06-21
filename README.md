@@ -142,6 +142,7 @@ Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
 /history      Show recent conversation history
 /new          Start a fresh session here
 /status       Current session, project & queue
+/usage        Account info & current context usage
 /btw <text>   Queue a follow-up to run after the current task
 /flush        Send queued follow-ups now
 /queue        Show queued follow-ups
@@ -300,6 +301,20 @@ the bot inherits whatever MCP servers Kiro CLI is configured with.
 
 ---
 
+## 🔐 Inline approvals
+
+The bot implements ACP `session/request_permission`: when Kiro asks the client
+to approve a risky tool call, it appears in Telegram with **Approve / Approve
+always / Deny** buttons and your choice is sent back (unanswered prompts time
+out and are denied).
+
+> Note: Kiro CLI 2.8.1 resolves tool permissions internally (via
+> `~/.kiro/settings/permissions.yaml` and agent config) and does **not** yet
+> delegate them over ACP, so these prompts stay dormant on current Kiro. The
+> wiring is forward-compatible and activates automatically when Kiro emits
+> permission requests. Today, use the live tool stream + **⏹ Stop** to
+> intervene, and `permissions.yaml` to govern what Kiro may do.
+
 ## 🔐 Security
 
 This bot lets authorized Telegram users run commands and edit files on the host.
@@ -319,8 +334,9 @@ user. See [SECURITY.md](./SECURITY.md) for the full model.
 - [x] 24/7 cross-platform background service
 - [x] Voice messages → speech-to-text → prompt (multi-language)
 - [x] Context-usage % in the status panel
+- [x] Inline approvals — approve/deny risky tools from buttons (non trust-all mode)
+- [x] Account & context usage (`/usage`)
 - [ ] **Token & cost meter** — per-session token counts and an estimated spend tally
-- [ ] **Inline approvals** — approve/deny risky tool calls (writes, shell) from buttons when not in trust-all mode
 - [ ] **Text-to-speech replies** — optionally speak answers back as voice notes
 - [ ] **Scheduled-task chaining & conditions** — run task B after A, or only if a command/file check passes
 - [ ] **Team mode** — multiple authorized users with per-user sessions, roles, and an audit log
