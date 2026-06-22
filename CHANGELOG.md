@@ -26,6 +26,14 @@ The latest section is published verbatim as the GitHub Release notes by
   `🧩 Call MCP: <tool>` when the call carries no server name). Built-in
   file/shell tools are never mislabelled.
 
+### Fixed
+
+- **⚡ `/btw` now runs as soon as possible.** Previously `/btw <text>` only ever
+  parked the message in the queue — so when the bot was **idle** it sat there
+  doing nothing until `/flush` or another message. It now runs **immediately
+  when idle**, and when a turn is in flight it's queued and runs **automatically
+  the moment that turn finishes** (an in-flight agent turn can't be interrupted).
+
 ## [1.5.1] - 2026-06-22
 
 ### Added

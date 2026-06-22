@@ -68,12 +68,20 @@ export function registerControl(bot: Bot, deps: BotDeps): void {
   bot.command("btw", async (ctx) => {
     const text = (ctx.match || "").toString().trim();
     if (!text) {
-      await ctx.reply("Usage: /btw <something to do after the current task>");
+      await ctx.reply("Usage: /btw <something for the agent to do — now if idle, otherwise next>");
       return;
     }
     const rt = deps.registry.get(ctx.chat.id);
-    rt.enqueue(textPrompt(text));
-    await ctx.reply(`\u{1F4E5} Queued (position ${rt.queueLength}). It'll run when the current task finishes.`);
+    // Run it right away when idle; otherwise queue it to run automatically the
+    // moment the current turn finishes (can't interrupt an in-flight agent turn).
+    const outcome = await rt.submit(textPrompt(text));
+    if (outcome === "queued") {
+      await ctx.reply(
+        `\u{1F4E5} Queued (position ${rt.queueLength}) \u2014 it'll run automatically as soon as the current task finishes.`,
+      );
+    } else {
+      await ctx.reply("\u25B6\uFE0F On it\u2026");
+    }
   });
 
   bot.command("flush", async (ctx) => {

@@ -35,7 +35,7 @@ and extended into a full multi-session client.
 | 🧩 **MCP control** | `/mcp` lists MCP servers, **health-checks** them (which connected / failed and why), and **enables/disables** them — then restarts the agent to apply. |
 | 👥 **Subagent visibility** | When Kiro delegates to subagents and waits on them, you see each one **start / work / finish** plus a live `🤖 N running` summary — and subagent permission prompts route to your chat. |
 | ⌨️ **Typing indicator** | Stays on for the whole turn, even through long tool chains. |
-| 📥 **Queued follow-ups** | Message while Kiro is busy — it's queued and runs next. `/btw` queues explicitly; `/flush` runs now. |
+| 📥 **Queued follow-ups** | Message while Kiro is busy — it's queued and runs next. `/btw` runs it ASAP (now if idle, else right after the current task); `/flush` runs the queue now. |
 | ✏️ **Edit diffs** | File edits show as unified `diff` blocks with `+N -M` stats. |
 | 💬 **Quality markdown** | Converts agent markdown to Telegram **MarkdownV2** with safe escaping and code-fence-aware splitting. |
 | 🔁 **Self-healing** | Auto-restarts the Kiro agent with backoff and re-binds your session. |
@@ -174,7 +174,7 @@ Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
 /new          Start a fresh session here
 /status       Current session, project & queue
 /usage        Account info & current context usage
-/btw <text>   Queue a follow-up to run after the current task
+/btw <text>   Run it now if idle, else queue to run right after the current task
 /flush        Send queued follow-ups now
 /queue        Show queued follow-ups
 /clearqueue   Clear the queue

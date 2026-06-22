@@ -317,11 +317,6 @@ export class SessionRuntime {
     return "ran";
   }
 
-  enqueue(input: PromptInput): void {
-    this.queue.push(input);
-    this.changed();
-  }
-
   async cancel(): Promise<boolean> {
     if (!this.busy || !this.sessionId) return false;
     this.cancelled = true;
