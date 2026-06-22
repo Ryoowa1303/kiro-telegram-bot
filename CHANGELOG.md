@@ -11,14 +11,15 @@ The latest section is published verbatim as the GitHub Release notes by
 
 ### Changed
 
-- **✅ Richer, always-delivered "Done" message.** A turn's completion message is
-  now sent **even when its session is in the background** (you switched to
-  another session while it kept working), tagged with the session it came from
-  — e.g. `✅ Done [my-project · 1a2b3c4d] · end_turn · 12s` — so a task you left
-  running still pings you when it finishes. Every completion now also includes a
-  **file-change summary**: `📝 Files: +2 created · ~3 edited · −1 deleted` with
-  the list of paths, or **`📄 No files modified`** when nothing changed. File
-  operations are tracked for background turns too, so the summary is accurate
+- **✅ "Done" summaries from other running sessions.** When you drive several
+  sessions at once and switch between them, a background session that finishes
+  now pings you — clearly marked **`📨 From other session [project · id]`** with
+  a **short** file count (`📝 +2 created · ~3 edited · −1 deleted`, or
+  `📄 No files modified`). The session you're actively viewing still gets the
+  full completion message with the list of changed paths. Toggle with the new
+  **`NOTIFY_OTHER_SESSIONS`** env var (default `true`); set it `false` to keep
+  background sessions silent (their output still shows when you switch back).
+  File operations are tracked for background turns too, so the count is accurate
   regardless of which session you were viewing.
 - **🏷 Clearer skill & MCP tool lines.** Loading a skill now shows
   **`📚 Loaded skill: <name>`** instead of a cryptic `SKILL.md:1` read line, and

@@ -17,7 +17,7 @@ import { buildTranscript, readHistory } from "../sessions/history.js";
 import { TailWatcher } from "../sessions/tail.js";
 import type { HistoryEntry } from "../sessions/types.js";
 import { formatToolCall } from "../render/tool-call.js";
-import { type FileOp, fileOpFromUpdate, mergeFileOp, summarizeFileOps } from "../render/file-summary.js";
+import { type FileOp, fileOpFromUpdate, mergeFileOp, summarizeFileOps, summarizeFileOpsShort } from "../render/file-summary.js";
 import { isActiveStatus, renderSubagentTransition, statusKey } from "../render/subagent.js";
 import type { PendingStage, SubagentInfo } from "../acp/types.js";
 import { ResponseStreamer } from "../stream/streamer.js";
@@ -435,26 +435,31 @@ export class SessionRuntime {
       const streamedOutput = this.streamer?.hasOutput ?? false;
       if (this.streamer) await this.streamer.finalize();
       if (this.foreground) await this.sendTurnImages();
-      // Completion / error notification is sent even when this session is in the
-      // background, so a turn you left running while viewing another session
-      // still pings you when it finishes (labelled with which session it was).
-      if (outcome.result || this.cancelled) {
-        await this.notify(this.completionMessage(outcome.result?.stopReason, startedAt, streamedOutput), {
-          loud: true,
-        });
-      } else if (outcome.error) {
-        const transient = isTransientAcpError(outcome.error);
-        await this.notify(this.errorMessage(outcome.error, startedAt, outcome.attempts, transient), {
-          loud: true,
-        });
+      // The completion / error message is sent for the foreground turn always,
+      // and for a background turn only when NOTIFY_OTHER_SESSIONS is on — so a
+      // task you left running while viewing another session still pings you.
+      if (this.foreground || this.cfg.notifyOtherSessions) {
+        if (outcome.result || this.cancelled) {
+          await this.notify(this.completionMessage(outcome.result?.stopReason, startedAt, streamedOutput), {
+            loud: true,
+          });
+        } else if (outcome.error) {
+          const transient = isTransientAcpError(outcome.error);
+          await this.notify(this.errorMessage(outcome.error, startedAt, outcome.attempts, transient), {
+            loud: true,
+          });
+        }
       }
     } catch (err) {
       // Unexpected failure outside the prompt path (e.g. while finalizing).
       await this.streamer?.finalize().catch(() => {});
-      await this.notify(
-        `\u274C${this.bgTag()} Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`,
-        { loud: true },
-      );
+      if (this.foreground || this.cfg.notifyOtherSessions) {
+        const from = this.foreground ? "" : `\u{1F4E8} From other session ${this.sessionTag()}\n`;
+        await this.notify(
+          `${from}\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`,
+          { loud: true },
+        );
+      }
     } finally {
       this.typing.stop();
       this.streamer = undefined;
@@ -556,15 +561,14 @@ export class SessionRuntime {
     }
   }
 
-  /** Build the "turn finished" message: completion line + file-change summary.
-   *  When this session is in the background, it's tagged so you can tell which
-   *  of your running sessions just finished. */
+  /** Build the "turn finished" message. The foreground turn gets the full
+   *  file list; a background turn gets a clearly-labelled "other session" ping
+   *  with a short counts-only summary. */
   private completionMessage(stopReason: string | undefined, startedAt: number, streamedOutput: boolean): string {
     const elapsed = fmtDuration(Date.now() - startedAt);
-    const tag = this.bgTag();
     let head: string;
     if (this.cancelled || stopReason === "cancelled") {
-      head = `\u23F9 Stopped${tag} \u00B7 ${elapsed}`;
+      head = `\u23F9 Stopped \u00B7 ${elapsed}`;
     } else {
       const reason = stopReason || "end_turn";
       const ctx = this.contextInfo()?.contextUsagePercentage;
@@ -572,25 +576,27 @@ export class SessionRuntime {
       // Only claim "no text output" when we were actually streaming (foreground);
       // a background turn's prose lands in its log, not here.
       const noOut = this.foreground && !streamedOutput ? " \u00B7 no text output" : "";
-      head = `\u2705 Done${tag} \u00B7 ${reason} \u00B7 ${elapsed}${ctxStr}${noOut}`;
+      head = `\u2705 Done \u00B7 ${reason} \u00B7 ${elapsed}${ctxStr}${noOut}`;
     }
-    return `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}`;
+    if (this.foreground) return `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}`;
+    return `\u{1F4E8} From other session ${this.sessionTag()}\n${head}\n${summarizeFileOpsShort(this.fileOps)}`;
   }
 
-  /** Build the turn-failed message (also delivered for background sessions). */
+  /** Build the turn-failed message (foreground: full; background: labelled + short). */
   private errorMessage(error: Error, startedAt: number, attempts: number, transient: boolean): string {
-    const tag = this.bgTag();
     const summary = formatErrorSummary(error, fmtDuration(Date.now() - startedAt), attempts, transient);
-    const head = tag ? `\u274C${tag}\n${summary}` : summary;
-    return this.fileOps.size > 0 ? `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}` : head;
+    if (this.foreground) {
+      return this.fileOps.size > 0 ? `${summary}\n${summarizeFileOps(this.fileOps, this.cwd)}` : summary;
+    }
+    const files = this.fileOps.size > 0 ? `\n${summarizeFileOpsShort(this.fileOps)}` : "";
+    return `\u{1F4E8} From other session ${this.sessionTag()}\n${summary}${files}`;
   }
 
-  /** A " [project · id]" tag for background turns; empty for the foreground. */
-  private bgTag(): string {
-    if (this.foreground) return "";
+  /** "[project · 1a2b3c4d]" — identifies which background session a ping is from. */
+  private sessionTag(): string {
     const name = this.projectName || basename(this.cwd) || "session";
     const id = this.sessionId ? ` \u00B7 ${this.sessionId.slice(0, 8)}` : "";
-    return ` [${name}${id}]`;
+    return `[${name}${id}]`;
   }
 
   private async flushQueue(): Promise<void> {

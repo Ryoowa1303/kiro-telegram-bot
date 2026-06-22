@@ -103,6 +103,9 @@ export interface AppConfig {
   mcpProbeConcurrency: number;
   /** Show subagent (crew) activity while the main agent waits on them. */
   showSubagents: boolean;
+  /** Deliver a turn's "Done" summary to the chat even when that session is in
+   *  the background (you've switched to another session). */
+  notifyOtherSessions: boolean;
 }
 
 export function loadConfig(): AppConfig {
@@ -164,6 +167,7 @@ export function loadConfig(): AppConfig {
     mcpProbeTimeoutMs: num(process.env.MCP_PROBE_TIMEOUT_MS, 8000),
     mcpProbeConcurrency: num(process.env.MCP_PROBE_CONCURRENCY, 6),
     showSubagents: bool(process.env.SHOW_SUBAGENTS, true),
+    notifyOtherSessions: bool(process.env.NOTIFY_OTHER_SESSIONS, true),
   };
 
   return cfg;

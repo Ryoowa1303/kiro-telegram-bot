@@ -283,6 +283,7 @@ Resuming an **idle** session loads it directly so you continue the exact thread.
 | `SHOW_EDIT_DIFFS` | no | `true` | Show unified diffs for edits. |
 | `DIFF_MAX_LINES` | no | `120` | Max diff lines shown inline. |
 | `SHOW_SUBAGENTS` | no | `true` | Stream subagent (crew) start/work/finish while the main agent waits. |
+| `NOTIFY_OTHER_SESSIONS` | no | `true` | Deliver a session's "Done" summary (with a short created/edited/deleted count) even when it's a background session, marked "From other session". `false` keeps background sessions silent. |
 | `MCP_PROBE_TIMEOUT_MS` | no | `8000` | Per-server timeout for the `/mcp` live health-check. |
 | `MCP_PROBE_CONCURRENCY` | no | `6` | How many MCP health probes run at once. |
 | `ACP_AUTO_RESTART` | no | `true` | Auto-restart the agent if it exits. |

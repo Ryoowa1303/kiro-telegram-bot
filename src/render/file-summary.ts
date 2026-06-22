@@ -57,22 +57,30 @@ export function mergeFileOp(prev: FileOp | undefined, next: FileOp): FileOp {
 export function summarizeFileOps(ops: Map<string, FileOp>, cwd: string, maxList = 15): string {
   if (ops.size === 0) return "\u{1F4C4} No files modified";
 
-  const counts: Record<FileOp, number> = { created: 0, edited: 0, deleted: 0, moved: 0 };
-  for (const op of ops.values()) counts[op]++;
-
-  const head: string[] = [];
-  if (counts.created) head.push(`+${counts.created} created`);
-  if (counts.edited) head.push(`~${counts.edited} edited`);
-  if (counts.deleted) head.push(`\u2212${counts.deleted} deleted`);
-  if (counts.moved) head.push(`\u2192${counts.moved} moved`);
-
   const entries = [...ops.entries()].sort(
     (a, b) => ORDER[a[1]] - ORDER[b[1]] || a[0].localeCompare(b[0]),
   );
   const shown = entries.slice(0, maxList).map(([p, op]) => `${SIGN[op]} ${rel(cwd, p)}`);
   const more = entries.length > maxList ? `\n  \u2026and ${entries.length - maxList} more` : "";
 
-  return `\u{1F4DD} Files: ${head.join(" \u00B7 ")}\n  ${shown.join("\n  ")}${more}`;
+  return `\u{1F4DD} Files: ${countsLine(ops)}\n  ${shown.join("\n  ")}${more}`;
+}
+
+/** Compact, one-line counts (no file list) — used for "other session" pings. */
+export function summarizeFileOpsShort(ops: Map<string, FileOp>): string {
+  return ops.size === 0 ? "\u{1F4C4} No files modified" : `\u{1F4DD} ${countsLine(ops)}`;
+}
+
+/** "+2 created · ~3 edited · −1 deleted" — only the non-zero buckets. */
+function countsLine(ops: Map<string, FileOp>): string {
+  const counts: Record<FileOp, number> = { created: 0, edited: 0, deleted: 0, moved: 0 };
+  for (const op of ops.values()) counts[op]++;
+  const parts: string[] = [];
+  if (counts.created) parts.push(`+${counts.created} created`);
+  if (counts.edited) parts.push(`~${counts.edited} edited`);
+  if (counts.deleted) parts.push(`\u2212${counts.deleted} deleted`);
+  if (counts.moved) parts.push(`\u2192${counts.moved} moved`);
+  return parts.join(" \u00B7 ");
 }
 
 function findDiff(u: SessionUpdate): ToolCallContent | undefined {
