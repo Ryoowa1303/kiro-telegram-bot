@@ -20,6 +20,11 @@ The latest section is published verbatim as the GitHub Release notes by
   the list of paths, or **`📄 No files modified`** when nothing changed. File
   operations are tracked for background turns too, so the summary is accurate
   regardless of which session you were viewing.
+- **🏷 Clearer skill & MCP tool lines.** Loading a skill now shows
+  **`📚 Loaded skill: <name>`** instead of a cryptic `SKILL.md:1` read line, and
+  MCP/extension tool calls render as **`🧩 Call MCP <server>: <method>`** (or
+  `🧩 Call MCP: <tool>` when the call carries no server name). Built-in
+  file/shell tools are never mislabelled.
 
 ## [1.5.1] - 2026-06-22
 
