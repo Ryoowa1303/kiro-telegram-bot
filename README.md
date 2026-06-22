@@ -440,7 +440,13 @@ git push --follow-tags         # pushing the v* tag triggers .github/workflows/r
 
 ## 📊 Stars
 
-[![Star History Chart](https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date)](https://www.star-history.com/?repos=artickc%2Fkiro-telegram-bot&type=date&legend=top-left)
+<a href="https://www.star-history.com/?repos=artickc%2Fkiro-telegram-bot&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date&legend=top-left" />
+  </picture>
+</a>
 
 If this project helps you, please consider giving it a ⭐ — it really helps!
 
@@ -451,7 +457,13 @@ If this project helps you, please consider giving it a ⭐ — it really helps!
 > See where in the world this project's stargazers live — an interactive map of
 > the community.
 
-[![StarMapper](https://starmapper.bruniaux.com/artickc/kiro-telegram-bot/opengraph-image)](https://starmapper.bruniaux.com/artickc/kiro-telegram-bot)
+<a href="https://starmapper.bruniaux.com/artickc/kiro-telegram-bot">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://starmapper.bruniaux.com/api/map-image/artickc/kiro-telegram-bot?theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://starmapper.bruniaux.com/api/map-image/artickc/kiro-telegram-bot?theme=light" />
+    <img alt="StarMapper — where this project's stargazers live" src="https://starmapper.bruniaux.com/api/map-image/artickc/kiro-telegram-bot" />
+  </picture>
+</a>
 
 ---
 
