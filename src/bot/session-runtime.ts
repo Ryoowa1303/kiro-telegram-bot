@@ -129,6 +129,11 @@ export class SessionRuntime {
     return this.lastCompletion;
   }
 
+  /** Searchable hashtags for the current session (project/session/model/reasoning). */
+  get hashtagLine(): string {
+    return this.hashtags();
+  }
+
   /** Switch live-streaming on/off. Going background seals any in-flight turn;
    *  returning to the foreground while a turn is still running resumes RICH
    *  live streaming (thinking / tools / prose) rather than a degraded tail. */
@@ -441,7 +446,7 @@ export class SessionRuntime {
     try {
       const outcome = await this.runPromptWithRetries(content);
       const streamedOutput = this.streamer?.hasOutput ?? false;
-      if (this.streamer) await this.streamer.finalize();
+      if (this.streamer) await this.streamer.finalize(this.hashtags());
       if (this.foreground) await this.sendTurnImages();
       // Always build the completion (records `lastCompletion` so switching back
       // to this session can replay its Done + summary). Only PING the chat for
@@ -571,9 +576,13 @@ export class SessionRuntime {
   private completionMessage(stopReason: string | undefined, startedAt: number, streamedOutput: boolean): string {
     const head = this.doneHead(stopReason, startedAt, streamedOutput);
     const tags = this.hashtags();
-    const full = `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}\n\n${tags}`;
-    this.lastCompletion = full;
-    if (this.foreground) return full;
+    const base = `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}`;
+    this.lastCompletion = `${base}\n\n${tags}`; // switch-replay stays searchable
+    if (this.foreground) {
+      // The streamed response already carries the tag footer; only add tags to
+      // the Done line when there was no response to tag (tool-only / no output).
+      return streamedOutput ? base : `${base}\n\n${tags}`;
+    }
     return `\u{1F4E8} From other session ${this.sessionTag()}\n${head}\n${summarizeFileOpsShort(this.fileOps)}\n\n${tags}`;
   }
 

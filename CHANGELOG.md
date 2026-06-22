@@ -19,9 +19,11 @@ The latest section is published verbatim as the GitHub Release notes by
   release's features/fixes **tagged `#update`** so every upgrade is easy to find.
   It never interrupts work, and only acts on a global npm install (a source
   checkout is left to `git`). Tunable via `UPDATE_CHECK_MS`.
-- **🏷 Searchable agent hashtags.** Each turn's completion now ends with
-  `#proj_… #sess_… #model_… #reason_…`, so tapping a tag in Telegram pulls up
-  every message of that project / session / model / reasoning level.
+- **🏷 Searchable hashtags on every message.** The agent's **response** now ends
+  with `#proj_… #sess_… #model_… #reason_…`, and — since Telegram bots can't edit
+  a user's message — your **prompt is replaced with a tagged 👤 echo** carrying
+  the same tags. Tapping any tag pulls up every message (yours and the agent's)
+  for that project / session / model / reasoning level.
 
 - **🗂 Open any folder / safer project creation (`/projects`).** `/projects <path>`
   now opens a session in **any existing folder** — `C:\work\app`, `/home/me/app`,

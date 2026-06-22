@@ -61,10 +61,14 @@ export class ResponseStreamer {
     return this.liveId !== undefined || this.segs.some((s) => s.text.trim().length > 0);
   }
 
-  async finalize(): Promise<void> {
+  async finalize(footer?: string): Promise<void> {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
+    // Append a footer (e.g. searchable hashtags) to the tail of the response —
+    // but only if the agent actually produced output, so we never send a
+    // message that is just tags.
+    if (footer && this.hasOutput) this.segs.push({ kind: "out", text: footer });
     await this.flush(true);
   }
 
