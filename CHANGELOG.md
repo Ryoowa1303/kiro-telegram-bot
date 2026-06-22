@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The latest section is published verbatim as the GitHub Release notes by
 `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed.
 
+## [1.5.2] - Unreleased
+
+### Changed
+
+- **✅ Richer, always-delivered "Done" message.** A turn's completion message is
+  now sent **even when its session is in the background** (you switched to
+  another session while it kept working), tagged with the session it came from
+  — e.g. `✅ Done [my-project · 1a2b3c4d] · end_turn · 12s` — so a task you left
+  running still pings you when it finishes. Every completion now also includes a
+  **file-change summary**: `📝 Files: +2 created · ~3 edited · −1 deleted` with
+  the list of paths, or **`📄 No files modified`** when nothing changed. File
+  operations are tracked for background turns too, so the summary is accurate
+  regardless of which session you were viewing.
+
 ## [1.5.1] - 2026-06-22
 
 ### Added

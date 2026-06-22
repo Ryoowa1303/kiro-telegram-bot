@@ -4,7 +4,7 @@
  * and per-chat preferences (project, agent, model, reasoning). State persists
  * to the settings store so it survives restarts.
  */
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Api } from "grammy";
 import { type AcpClient, isTransientAcpError } from "../acp/client.js";
 import type { ContentBlock, PromptResult, SessionUpdate } from "../acp/types.js";
@@ -17,6 +17,7 @@ import { buildTranscript, readHistory } from "../sessions/history.js";
 import { TailWatcher } from "../sessions/tail.js";
 import type { HistoryEntry } from "../sessions/types.js";
 import { formatToolCall } from "../render/tool-call.js";
+import { type FileOp, fileOpFromUpdate, mergeFileOp, summarizeFileOps } from "../render/file-summary.js";
 import { isActiveStatus, renderSubagentTransition, statusKey } from "../render/subagent.js";
 import type { PendingStage, SubagentInfo } from "../acp/types.js";
 import { ResponseStreamer } from "../stream/streamer.js";
@@ -53,6 +54,9 @@ export class SessionRuntime {
   private streamer: ResponseStreamer | undefined;
   private readonly typing: TypingIndicator;
   private shownToolIds = new Set<string>();
+  /** Files touched this turn (path -> operation), tracked even in background so
+   *  the completion message can summarise what changed. */
+  private fileOps = new Map<string, FileOp>();
   /** Subagent sessionId -> last status key shown this turn (dedupe). */
   private subagentShown = new Map<string, string>();
   private turnStartedAt = 0;
@@ -410,6 +414,7 @@ export class SessionRuntime {
     this.busy = true;
     this.cancelled = false;
     this.shownToolIds = new Set();
+    this.fileOps = new Map();
     this.subagentShown = new Map();
     // A new streamed turn supersedes any transient "follow" watch of this same
     // session's previous in-flight turn (avoids duplicated output).
@@ -432,27 +437,29 @@ export class SessionRuntime {
 
     try {
       const outcome = await this.runPromptWithRetries(content);
+      const streamedOutput = this.streamer?.hasOutput ?? false;
       if (this.streamer) await this.streamer.finalize();
-      if (this.foreground) {
-        await this.sendTurnImages();
-        if (outcome.result || this.cancelled) {
-          await this.notify(this.completionLine(outcome.result?.stopReason, startedAt), { loud: true });
-        } else if (outcome.error) {
-          const transient = isTransientAcpError(outcome.error);
-          await this.notify(
-            formatErrorSummary(outcome.error, fmtDuration(Date.now() - startedAt), outcome.attempts, transient),
-            { loud: true },
-          );
-        }
+      if (this.foreground) await this.sendTurnImages();
+      // Completion / error notification is sent even when this session is in the
+      // background, so a turn you left running while viewing another session
+      // still pings you when it finishes (labelled with which session it was).
+      if (outcome.result || this.cancelled) {
+        await this.notify(this.completionMessage(outcome.result?.stopReason, startedAt, streamedOutput), {
+          loud: true,
+        });
+      } else if (outcome.error) {
+        const transient = isTransientAcpError(outcome.error);
+        await this.notify(this.errorMessage(outcome.error, startedAt, outcome.attempts, transient), {
+          loud: true,
+        });
       }
     } catch (err) {
       // Unexpected failure outside the prompt path (e.g. while finalizing).
       await this.streamer?.finalize().catch(() => {});
-      if (this.foreground) {
-        await this.notify(`\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`, {
-          loud: true,
-        });
-      }
+      await this.notify(
+        `\u274C${this.bgTag()} Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`,
+        { loud: true },
+      );
     } finally {
       this.typing.stop();
       this.streamer = undefined;
@@ -554,17 +561,41 @@ export class SessionRuntime {
     }
   }
 
-  /** Build the "turn finished" line shown after every turn. */
-  private completionLine(stopReason: string | undefined, startedAt: number): string {
+  /** Build the "turn finished" message: completion line + file-change summary.
+   *  When this session is in the background, it's tagged so you can tell which
+   *  of your running sessions just finished. */
+  private completionMessage(stopReason: string | undefined, startedAt: number, streamedOutput: boolean): string {
     const elapsed = fmtDuration(Date.now() - startedAt);
+    const tag = this.bgTag();
+    let head: string;
     if (this.cancelled || stopReason === "cancelled") {
-      return `\u23F9 Stopped \u00B7 ${elapsed}`;
+      head = `\u23F9 Stopped${tag} \u00B7 ${elapsed}`;
+    } else {
+      const reason = stopReason || "end_turn";
+      const ctx = this.contextInfo()?.contextUsagePercentage;
+      const ctxStr = ctx !== undefined ? ` \u00B7 ctx ${ctx.toFixed(0)}%` : "";
+      // Only claim "no text output" when we were actually streaming (foreground);
+      // a background turn's prose lands in its log, not here.
+      const noOut = this.foreground && !streamedOutput ? " \u00B7 no text output" : "";
+      head = `\u2705 Done${tag} \u00B7 ${reason} \u00B7 ${elapsed}${ctxStr}${noOut}`;
     }
-    const reason = stopReason || "end_turn";
-    const ctx = this.contextInfo()?.contextUsagePercentage;
-    const ctxStr = ctx !== undefined ? ` \u00B7 ctx ${ctx.toFixed(0)}%` : "";
-    const noOut = this.streamer?.hasOutput ? "" : " \u00B7 no text output";
-    return `\u2705 Done \u00B7 ${reason} \u00B7 ${elapsed}${ctxStr}${noOut}`;
+    return `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}`;
+  }
+
+  /** Build the turn-failed message (also delivered for background sessions). */
+  private errorMessage(error: Error, startedAt: number, attempts: number, transient: boolean): string {
+    const tag = this.bgTag();
+    const summary = formatErrorSummary(error, fmtDuration(Date.now() - startedAt), attempts, transient);
+    const head = tag ? `\u274C${tag}\n${summary}` : summary;
+    return this.fileOps.size > 0 ? `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}` : head;
+  }
+
+  /** A " [project · id]" tag for background turns; empty for the foreground. */
+  private bgTag(): string {
+    if (this.foreground) return "";
+    const name = this.projectName || basename(this.cwd) || "session";
+    const id = this.sessionId ? ` \u00B7 ${this.sessionId.slice(0, 8)}` : "";
+    return ` [${name}${id}]`;
   }
 
   private async flushQueue(): Promise<void> {
@@ -575,14 +606,28 @@ export class SessionRuntime {
   }
 
   private onUpdate(sessionId: string, update: SessionUpdate): void {
-    if (!this.busy || !this.foreground || sessionId !== this.sessionId || !this.streamer) return;
+    if (!this.busy || sessionId !== this.sessionId) return;
     const kind = update.sessionUpdate;
+
+    // Accumulate the turn's file-change summary + image-scan text even when this
+    // session is in the background (its output isn't streamed here, but the
+    // completion message still reports what changed / which images were made).
+    if (kind === "tool_call" || kind === "tool_call_update") {
+      if (update.rawInput) this.imageScanText += " " + JSON.stringify(update.rawInput);
+      if (update.title) this.imageScanText += " " + update.title;
+      const fo = fileOpFromUpdate(update);
+      if (fo) this.fileOps.set(fo.path, mergeFileOp(this.fileOps.get(fo.path), fo.op));
+    } else if (kind === "agent_message_chunk") {
+      const text = update.content?.text;
+      if (typeof text === "string") this.imageScanText += text;
+    }
+
+    // Only the live foreground turn streams to Telegram.
+    if (!this.foreground || !this.streamer) return;
+
     if (kind === "agent_message_chunk") {
       const text = update.content?.text;
-      if (typeof text === "string") {
-        this.streamer.appendOutput(text);
-        this.imageScanText += text;
-      }
+      if (typeof text === "string") this.streamer.appendOutput(text);
       return;
     }
     if (kind === "agent_thought_chunk") {
@@ -591,8 +636,6 @@ export class SessionRuntime {
       return;
     }
     if (kind === "tool_call" || kind === "tool_call_update") {
-      if (update.rawInput) this.imageScanText += " " + JSON.stringify(update.rawInput);
-      if (update.title) this.imageScanText += " " + update.title;
       if (!this.cfg.showToolCalls) return;
       const id = update.toolCallId || `${kind}:${update.title ?? ""}`;
       if (this.shownToolIds.has(id)) return;
