@@ -13,6 +13,7 @@ import type { SessionStore } from "../sessions/store.js";
 import type { TaskRunner } from "../tasks/runner.js";
 import type { TaskStore } from "../tasks/store.js";
 import type { StatusPanel } from "./menu/status-panel.js";
+import type { Ephemeral } from "./menu/ephemeral.js";
 import type { RuntimeRegistry } from "./registry.js";
 import type { TaskWizard } from "./wizard/task-wizard.js";
 
@@ -26,6 +27,7 @@ export interface BotDeps {
   menuCache: MenuCache;
   settings: SettingsStore;
   statusPanel: StatusPanel;
+  ephemeral: Ephemeral;
   tasks: TaskStore;
   taskRunner: TaskRunner;
   wizard: TaskWizard;

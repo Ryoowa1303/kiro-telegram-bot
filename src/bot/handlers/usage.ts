@@ -25,7 +25,8 @@ export async function showUsage(ctx: Context, deps: BotDeps): Promise<void> {
   ].filter(Boolean);
 
   if (!acct) lines.splice(1, 0, "(account info unavailable \u2014 is kiro-cli logged in?)");
-  await ctx.reply(lines.join("\n"));
+  await deps.ephemeral.open(ctx);
+  await deps.ephemeral.reply(ctx, lines.join("\n"));
 }
 
 export function registerUsage(bot: Bot, deps: BotDeps): void {

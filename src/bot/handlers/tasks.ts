@@ -17,8 +17,9 @@ import { sendProjectMenu } from "./projects.js";
 const UUID = "([0-9a-fA-F-]{36})";
 
 export async function showTasks(ctx: Context, deps: BotDeps): Promise<void> {
+  await deps.ephemeral.open(ctx);
   const { text, kb } = listView(deps, ctx.chat!.id);
-  await ctx.reply(text, { reply_markup: kb });
+  await deps.ephemeral.reply(ctx, text, { reply_markup: kb });
 }
 
 export async function renderWizardPrompt(ctx: Context, deps: BotDeps, p: WizardPrompt): Promise<void> {

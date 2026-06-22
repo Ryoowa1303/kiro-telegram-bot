@@ -22,15 +22,16 @@ export async function sendProjectMenu(
   entries?: ProjectEntry[],
 ): Promise<void> {
   const chatId = ctx.chat!.id;
+  await deps.ephemeral.open(ctx);
   const list = sortByRecency(entries ?? deps.projects.list(PAGE), deps);
   deps.menuCache.setProjects(chatId, list);
   if (list.length === 0) {
-    await ctx.reply("No matching projects. Try `/projects new <name>` to create one.");
+    await deps.ephemeral.reply(ctx, "No matching projects. Try `/projects new <name>` to create one.");
     return;
   }
   const kb = new InlineKeyboard();
   list.forEach((p, i) => kb.text(`\u{1F4C1} ${p.name}`, `${prefix}${i}`).row());
-  await ctx.reply(title, { reply_markup: kb });
+  await deps.ephemeral.reply(ctx, title, { reply_markup: kb });
 }
 
 /** Refine project order with Kiro session recency: a project's effective
@@ -93,14 +94,12 @@ export function registerProjects(bot: Bot, deps: BotDeps): void {
       return;
     }
     await ctx.answerCallbackQuery();
+    await deps.ephemeral.clear(ctx.chat!.id); // remove the project picker
     try {
       await deps.registry.controller(ctx.chat!.id).addNew(entry.path, entry.name);
-      await ctx.editMessageText(
-        `\u2705 Project set: ${entry.name}\n${entry.path}\n\nNew session ready \u2014 send a message.`,
-      );
-      await refreshMenu(ctx, deps, `\u{1F4C1} Now working in ${entry.name}`);
+      await refreshMenu(ctx, deps, `\u{1F4C1} Now working in ${entry.name} \u2014 send a message.`);
     } catch (err) {
-      await ctx.editMessageText(`\u274C Could not open ${entry.name}: ${(err as Error).message}`);
+      await ctx.reply(`\u274C Could not open ${entry.name}: ${(err as Error).message}`);
     }
   });
 }

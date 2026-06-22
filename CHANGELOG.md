@@ -39,6 +39,13 @@ The latest section is published verbatim as the GitHub Release notes by
   long ago it was last active, unread count, and a short preview of its first
   prompt (reasoning directive stripped) — so you can tell sessions apart and act
   on each one directly. The foreground session shows ▶️ Current instead of Switch.
+- **🧹 Self-cleaning navigation — a tidy history.** Menus, session/project
+  cards, pickers and submenus are now **transient**: opening a new surface (or
+  acting on one) removes the previous one, and your command / menu-button
+  messages are deleted after they're handled. Boundary markers you actually want
+  to keep — **🔀 Switched / ✨ New session / 📁 Now working in…**, agent output,
+  Done summaries and the pinned status panel — always remain, so the chat reads
+  as a clean timeline of what happened, not a pile of menus.
 
 ### Fixed
 

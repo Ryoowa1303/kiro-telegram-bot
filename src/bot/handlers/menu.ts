@@ -20,8 +20,9 @@ import { showUsage } from "./usage.js";
 
 /** Open the full inline menu, showing the current agent/model/reasoning. */
 export async function openMainMenu(ctx: Context, deps: BotDeps): Promise<void> {
+  await deps.ephemeral.open(ctx);
   const rt = deps.registry.get(ctx.chat!.id);
-  await ctx.reply("\u2699\uFE0F Menu", {
+  await deps.ephemeral.reply(ctx, "\u2699\uFE0F Menu", {
     reply_markup: mainMenuInline({
       agent: rt.agent || "default",
       model: rt.model || "default",
@@ -118,7 +119,8 @@ async function dispatchMenu(ctx: Context, deps: BotDeps, action: string): Promis
     case "status":
       await ctx.answerCallbackQuery();
       await deps.statusPanel.refresh(chatId);
-      return void ctx.reply(deps.statusPanel.render(chatId));
+      await deps.ephemeral.open(ctx);
+      return void deps.ephemeral.reply(ctx, deps.statusPanel.render(chatId));
     case "usage":
       await ctx.answerCallbackQuery();
       return showUsage(ctx, deps);
@@ -157,36 +159,39 @@ async function confirm(ctx: Context, deps: BotDeps, text: string): Promise<void>
 async function showAgentMenu(ctx: Context, deps: BotDeps): Promise<void> {
   const rt = deps.registry.get(ctx.chat!.id);
   await ensureReady(ctx, rt);
+  await deps.ephemeral.open(ctx);
   const modes = deps.acp.availableModes.slice(0, 60);
   if (modes.length === 0) {
-    await ctx.reply(`Current agent: ${rt.agent || "default"}\n(No selectable agents reported by Kiro.)`);
+    await deps.ephemeral.reply(ctx, `Current agent: ${rt.agent || "default"}\n(No selectable agents reported by Kiro.)`);
     return;
   }
   const kb = new InlineKeyboard();
   modes.forEach((m, i) => kb.text(`${m.id === rt.agent ? "\u2713 " : ""}${m.name}`, `agent:set:${i}`).row());
-  await ctx.reply(`Current agent: ${rt.agent || "default"}\nChoose an agent:`, { reply_markup: kb });
+  await deps.ephemeral.reply(ctx, `Current agent: ${rt.agent || "default"}\nChoose an agent:`, { reply_markup: kb });
 }
 
 async function showReasoningMenu(ctx: Context, deps: BotDeps): Promise<void> {
   const rt = deps.registry.get(ctx.chat!.id);
+  await deps.ephemeral.open(ctx);
   const kb = new InlineKeyboard();
   REASONING_LEVELS.forEach((l) => kb.text(`${l === rt.reasoning ? "\u2713 " : ""}${reasoningLabel(l)}`, `reason:${l}`));
-  await ctx.reply(`Current reasoning: ${reasoningLabel(rt.reasoning)}\nChoose effort:`, { reply_markup: kb });
+  await deps.ephemeral.reply(ctx, `Current reasoning: ${reasoningLabel(rt.reasoning)}\nChoose effort:`, { reply_markup: kb });
 }
 
 async function showModelMenu(ctx: Context, deps: BotDeps): Promise<void> {
   const rt = deps.registry.get(ctx.chat!.id);
   await ensureReady(ctx, rt);
+  await deps.ephemeral.open(ctx);
   const models = deps.acp.availableModels;
   if (models.length === 0) {
-    await ctx.reply("No selectable models reported by Kiro yet \u2014 send a message first, then try again.");
+    await deps.ephemeral.reply(ctx, "No selectable models reported by Kiro yet \u2014 send a message first, then try again.");
     return;
   }
   const current = rt.model || deps.acp.currentModelId;
   const kb = new InlineKeyboard();
   models.forEach((m, i) => kb.text(`${m.modelId === current ? "\u2713 " : ""}${m.name}`, `model:set:${i}`).row());
   kb.text("Default (agent's model)", "model:clear");
-  await ctx.reply(`Current model: ${rt.model || "default"}\nChoose a model:`, { reply_markup: kb });
+  await deps.ephemeral.reply(ctx, `Current model: ${rt.model || "default"}\nChoose a model:`, { reply_markup: kb });
 }
 
 /** Ensure a session is live so models/modes are populated; show typing meanwhile. */

@@ -27,7 +27,8 @@ export async function showSessions(ctx: Context, deps: BotDeps, query?: string):
     metas = metas.filter((m) => `${m.title} ${m.cwd} ${m.sessionId}`.toLowerCase().includes(q));
   }
   if (metas.length === 0) {
-    await ctx.reply(q ? `No sessions match "${q}".` : "No saved sessions found in ~/.kiro/sessions/cli.");
+    await deps.ephemeral.open(ctx);
+    await deps.ephemeral.reply(ctx, q ? `No sessions match "${q}".` : "No saved sessions found in ~/.kiro/sessions/cli.");
     return;
   }
   await sendSessionCards(ctx, deps, metas, q ? `Sessions matching "${q}"` : "Recent sessions");
@@ -40,20 +41,21 @@ async function sendSessionCards(
   metas: SessionMeta[],
   heading: string,
 ): Promise<void> {
+  await deps.ephemeral.open(ctx);
   const shown = metas.slice(0, CARD_LIMIT);
   const live = shown.filter((m) => m.active).length;
   const ofTotal = metas.length > shown.length ? ` of ${metas.length}` : "";
   const liveStr = live ? ` \u00B7 \u{1F7E2} ${live} live` : "";
-  await ctx.reply(`\u{1F5C2} ${heading} \u2014 ${shown.length} shown${ofTotal}${liveStr}`);
+  await deps.ephemeral.reply(ctx, `\u{1F5C2} ${heading} \u2014 ${shown.length} shown${ofTotal}${liveStr}`);
 
   for (const m of shown) {
     const contextPct = deps.acp.metadataFor(m.sessionId)?.contextUsagePercentage;
     const { text, keyboard } = buildSessionCard(m, { contextPct });
-    await ctx.reply(text, { reply_markup: keyboard });
+    await deps.ephemeral.reply(ctx, text, { reply_markup: keyboard });
   }
 
   if (metas.length > shown.length) {
-    await ctx.reply(`\u2026and ${metas.length - shown.length} more. Use /sessions <query> to filter.`);
+    await deps.ephemeral.reply(ctx, `\u2026and ${metas.length - shown.length} more. Use /sessions <query> to filter.`);
   }
 }
 
@@ -63,7 +65,8 @@ export function registerSessions(bot: Bot, deps: BotDeps): void {
   bot.command("active", async (ctx) => {
     const metas = deps.store.listActive();
     if (metas.length === 0) {
-      await ctx.reply("No sessions are currently running on this PC.");
+      await deps.ephemeral.open(ctx);
+      await deps.ephemeral.reply(ctx, "No sessions are currently running on this PC.");
       return;
     }
     await sendSessionCards(ctx, deps, metas, "Live sessions running now");
@@ -82,6 +85,7 @@ export function registerSessions(bot: Bot, deps: BotDeps): void {
       return;
     }
     await ctx.answerCallbackQuery();
+    await deps.ephemeral.clear(ctx.chat!.id); // remove the session cards
     const fgCwd = deps.registry.get(ctx.chat!.id).cwd;
     const cwd = meta.cwd || fgCwd;
     const projectName = basename(meta.cwd || fgCwd) || "session";
@@ -90,11 +94,11 @@ export function registerSessions(bot: Bot, deps: BotDeps): void {
       const { result, alreadyControlled } = await deps.registry
         .controller(ctx.chat!.id)
         .addAttach(id, cwd, projectName, prior);
-      await ctx.editMessageText(alreadyControlled ? `\u{1F500} Switched to ${meta.title}` : connectMessage(result, meta));
+      await ctx.reply(alreadyControlled ? `\u{1F500} Switched to ${meta.title}` : connectMessage(result, meta));
       await refreshMenu(ctx, deps, `\u{1F4C2} ${meta.title}`);
       await showHistory(deps, ctx.chat!.id, id, meta);
     } catch (err) {
-      await ctx.editMessageText(`\u274C Could not connect: ${(err as Error).message}`);
+      await ctx.reply(`\u274C Could not connect: ${(err as Error).message}`);
     }
   });
 

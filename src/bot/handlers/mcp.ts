@@ -87,7 +87,8 @@ function togglePanel(list: McpServer[], page: number): { text: string; kb: Inlin
 export async function showMcp(ctx: Context, deps: BotDeps): Promise<void> {
   const list = snapshot(ctx.chat!.id, deps);
   const { text, kb } = mainPanel(list);
-  await ctx.reply(text, { reply_markup: kb });
+  await deps.ephemeral.open(ctx);
+  await deps.ephemeral.reply(ctx, text, { reply_markup: kb });
 }
 
 function fmtProbe(r: McpProbeResult): string {

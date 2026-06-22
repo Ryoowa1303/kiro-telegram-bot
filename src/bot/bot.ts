@@ -33,6 +33,8 @@ import { registerTasks, registerWizardInput } from "./handlers/tasks.js";
 import { registerUsage } from "./handlers/usage.js";
 import { registerVoice } from "./handlers/voice.js";
 import { StatusPanel } from "./menu/status-panel.js";
+import { Ephemeral } from "./menu/ephemeral.js";
+import { BAR_LABELS } from "./menu/keyboard.js";
 import { PermissionService } from "./permission-service.js";
 import { RuntimeRegistry } from "./registry.js";
 import { TaskWizard } from "./wizard/task-wizard.js";
@@ -94,6 +96,7 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
     menuCache: new MenuCache(),
     settings,
     statusPanel,
+    ephemeral: new Ephemeral(bot.api),
     tasks,
     taskRunner,
     wizard,
@@ -111,6 +114,16 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
   acp.permissionHandler = (p) => permissions.handle(p);
 
   bot.use(createAuthMiddleware(cfg));
+
+  // Keep history clean: after handling, delete the user's command (/…) and
+  // persistent-bar button taps. Plain prompts and wizard input are kept.
+  bot.on("message:text", async (ctx, next) => {
+    await next();
+    const text = ctx.message?.text ?? "";
+    if (text.startsWith("/") || BAR_LABELS.includes(text)) {
+      await ctx.deleteMessage().catch(() => {});
+    }
+  });
 
   bot.callbackQuery(/^perm:(\d+):(\d+)$/, async (ctx) => {
     const label = permissions.resolveChoice(ctx.match![1]!, Number(ctx.match![2]));

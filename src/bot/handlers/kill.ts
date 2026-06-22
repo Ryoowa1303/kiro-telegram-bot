@@ -17,9 +17,10 @@ function targets(deps: BotDeps): SessionMeta[] {
 }
 
 export async function showKillConfirm(ctx: Context, deps: BotDeps): Promise<void> {
+  await deps.ephemeral.open(ctx);
   const active = targets(deps);
   if (active.length === 0) {
-    await ctx.reply("\u2705 No other active Kiro sessions to kill.");
+    await deps.ephemeral.reply(ctx, "\u2705 No other active Kiro sessions to kill.");
     return;
   }
   const list = active
@@ -29,7 +30,8 @@ export async function showKillConfirm(ctx: Context, deps: BotDeps): Promise<void
   const kb = new InlineKeyboard()
     .text(`\u{1F6D1} Kill ${active.length}`, "killall:confirm")
     .text("Cancel", "killall:cancel");
-  await ctx.reply(
+  await deps.ephemeral.reply(
+    ctx,
     `\u{1F6D1} Kill ${active.length} active session(s)?\n${list}\n\n(The bot's own session is excluded.)`,
     { reply_markup: kb },
   );

@@ -85,20 +85,21 @@ function buildRunningCard(s: RunningSession, deps: BotDeps, now: number): { text
 }
 
 export async function showRunning(ctx: Context, deps: BotDeps): Promise<void> {
+  await deps.ephemeral.open(ctx);
   const list = deps.registry.controller(ctx.chat!.id).list();
   if (list.length === 0) {
-    await ctx.reply("No sessions controlled yet. Use \u{1F4C1} Project or /new to start one.");
+    await deps.ephemeral.reply(ctx, "No sessions controlled yet. Use \u{1F4C1} Project or /new to start one.");
     return;
   }
   const now = Date.now();
   const shown = list.slice(0, CARD_LIMIT);
-  await ctx.reply(`\u{1F9ED} Sessions controlled by this chat (${list.length}) \u2014 tap \u{1F500} Switch on a card:`);
+  await deps.ephemeral.reply(ctx, `\u{1F9ED} Sessions controlled by this chat (${list.length}) \u2014 tap \u{1F500} Switch on a card:`);
   for (const s of shown) {
     const { text, kb } = buildRunningCard(s, deps, now);
-    await ctx.reply(text, { reply_markup: kb });
+    await deps.ephemeral.reply(ctx, text, { reply_markup: kb });
   }
   if (list.length > shown.length) {
-    await ctx.reply(`\u2026and ${list.length - shown.length} more.`);
+    await deps.ephemeral.reply(ctx, `\u2026and ${list.length - shown.length} more.`);
   }
 }
 
@@ -119,18 +120,15 @@ export function registerRunning(bot: Bot, deps: BotDeps): void {
 
   bot.callbackQuery(new RegExp(`^run:switch:${UUID}$`), async (ctx) => {
     await ctx.answerCallbackQuery();
+    await deps.ephemeral.clear(ctx.chat!.id); // remove the /running cards; 🔀 Switched stays
     await switchAndShow(ctx, deps, ctx.match![1]!);
   });
 
   bot.callbackQuery(new RegExp(`^run:close:${UUID}$`), async (ctx) => {
     const id = ctx.match![1]!;
-    const ctrl = deps.registry.controller(ctx.chat!.id);
-    const proj = ctrl.list().find((s) => s.sessionId === id)?.projectName;
-    await ctrl.close(id);
+    await deps.registry.controller(ctx.chat!.id).close(id);
     await ctx.answerCallbackQuery({ text: "Closed" });
-    await ctx
-      .editMessageText(`\u2716 Closed${proj ? ` ${proj}` : ""} (${id.slice(0, 8)}) \u2014 no longer controlled (still running).`)
-      .catch(() => {});
+    await ctx.deleteMessage().catch(() => {}); // remove just this card
   });
 }
 
