@@ -4,7 +4,7 @@
 export const COMMANDS: { command: string; description: string }[] = [
   { command: "start", description: "Welcome, menu & status panel" },
   { command: "menu", description: "Show the menu keyboard" },
-  { command: "projects", description: "Projects: list / search <q> / new <name>" },
+  { command: "projects", description: "Projects: list / search <q> / open <path> / new <name>" },
   { command: "sessions", description: "List/resume sessions (active first) \u00b7 /sessions <q>" },
   { command: "active", description: "Sessions running now on the PC" },
   { command: "running", description: "Sessions this chat controls \u2014 switch between them" },

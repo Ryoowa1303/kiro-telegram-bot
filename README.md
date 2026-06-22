@@ -162,7 +162,7 @@ Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
 
 ```
 /menu         Show the persistent menu keyboard
-/projects     List projects · /projects <q> search · /projects new <name>
+/projects     List · /projects <q> search · /projects <path> open any folder · /projects new <name>
 /sessions     List & resume sessions (active first) · /sessions <q> to filter
 /active       Sessions running now on the PC
 /running      Sessions this chat controls — switch between them

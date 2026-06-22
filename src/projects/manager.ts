@@ -2,7 +2,7 @@
  * Project manager — discovers candidate project directories under the
  * configured roots, de-duplicated by name, with search and create helpers.
  */
-import { mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { createLogger } from "../logger.js";
 
@@ -84,6 +84,7 @@ export class ProjectManager {
     const root = this.roots[0];
     if (!root) throw new Error("No project root configured (set PROJECT_ROOTS).");
     const full = join(root, clean);
+    if (existsSync(full)) throw new Error(`"${clean}" already exists in ${root}.`);
     mkdirSync(full, { recursive: true });
     return { name: clean, path: full, lastUsed: Date.now() };
   }

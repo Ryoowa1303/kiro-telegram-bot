@@ -9,6 +9,15 @@ The latest section is published verbatim as the GitHub Release notes by
 
 ## [1.5.2] - Unreleased
 
+### Added
+
+- **🗂 Open any folder / safer project creation (`/projects`).** `/projects <path>`
+  now opens a session in **any existing folder** — `C:\work\app`, `/home/me/app`,
+  `~/app`, even outside your `PROJECT_ROOTS` — and **errors if the path doesn't
+  exist** (it's never created). `/projects new <name>` now **errors if the
+  project already exists** instead of silently reusing it; otherwise it creates
+  the folder and starts a session there. `/project` works as an alias.
+
 ### Changed
 
 - **✅ "Done" summaries from other running sessions.** When you drive several

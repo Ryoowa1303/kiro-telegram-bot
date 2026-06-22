@@ -1,12 +1,17 @@
 /**
- * /projects — browse, search, or create the folder Kiro works in.
- *   /projects              list all projects
- *   /projects <query>      list projects whose name contains <query>
- *   /projects new <name>   create a folder and start a session in it
+ * /projects (alias /project) — browse, search, open any folder, or create.
+ *   /projects                list/pick projects (freshest first)
+ *   /projects <query>        filter projects by name
+ *   /projects <path>         open any existing folder (e.g. C:\x, /home/x, ~/x);
+ *                            errors if the path doesn't exist (never created)
+ *   /projects new <name>     create a folder under the first root + open it;
+ *                            errors if it already exists
  * Exposes a reusable project menu used by the menu button and the task wizard.
  */
 import { type Context, InlineKeyboard } from "grammy";
 import type { Bot } from "grammy";
+import { homedir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import type { ProjectEntry } from "../../projects/manager.js";
 import type { BotDeps } from "../deps.js";
 import { refreshMenu } from "../menu/refresh.js";
@@ -66,10 +71,17 @@ export async function showProjects(ctx: Context, deps: BotDeps, query?: string):
     try {
       const entry = deps.projects.create(create[1]!);
       await deps.registry.controller(ctx.chat!.id).addNew(entry.path, entry.name);
-      await refreshMenu(ctx, deps, `\u2705 Created and opened project: ${entry.name}\n${entry.path}`);
+      await refreshMenu(ctx, deps, `\u2705 Created and opened ${entry.name}\n${entry.path} \u2014 send a message.`);
     } catch (e) {
-      await ctx.reply(`\u274C Could not create project: ${(e as Error).message}`);
+      await deps.ephemeral.open(ctx);
+      await deps.ephemeral.reply(ctx, `\u274C Could not create project: ${(e as Error).message}`);
     }
+    return;
+  }
+
+  // Switch to an explicit path: /projects C:\path  ·  /projects /home/x  ·  ~/x
+  if (arg && looksLikePath(arg)) {
+    await openProjectPath(ctx, deps, arg);
     return;
   }
 
@@ -83,8 +95,43 @@ export async function showProjects(ctx: Context, deps: BotDeps, query?: string):
   await sendProjectMenu(ctx, deps, "proj:", "Choose a project:");
 }
 
+/** True when the argument looks like a filesystem path rather than a name. */
+function looksLikePath(s: string): boolean {
+  return /[\\/]/.test(s) || /^[a-zA-Z]:/.test(s) || s.startsWith("~");
+}
+
+/** Open a session in an explicit folder (any path, even outside PROJECT_ROOTS).
+ *  The folder must already exist — we never create it here. */
+async function openProjectPath(ctx: Context, deps: BotDeps, raw: string): Promise<void> {
+  const dir = resolvePath(raw);
+  if (!deps.projects.isDirectory(dir)) {
+    await deps.ephemeral.open(ctx);
+    await deps.ephemeral.reply(
+      ctx,
+      `\u274C Path not found: ${dir}\nI won't create it \u2014 use \`/projects new <name>\` to make a new project.`,
+    );
+    return;
+  }
+  await deps.ephemeral.open(ctx);
+  const name = basename(dir) || dir;
+  try {
+    await deps.registry.controller(ctx.chat!.id).addNew(dir, name);
+    await refreshMenu(ctx, deps, `\u{1F4C1} Now working in ${name}\n${dir} \u2014 send a message.`);
+  } catch (e) {
+    await deps.ephemeral.reply(ctx, `\u274C Could not open ${dir}: ${(e as Error).message}`);
+  }
+}
+
+/** Resolve `~` and normalise a user-supplied path (e.g. `c://lucru` → `C:\lucru`). */
+function resolvePath(p: string): string {
+  let s = p.trim();
+  if (s === "~") s = homedir();
+  else if (s.startsWith("~/") || s.startsWith("~\\")) s = join(homedir(), s.slice(2));
+  return resolve(s);
+}
+
 export function registerProjects(bot: Bot, deps: BotDeps): void {
-  bot.command("projects", (ctx) => showProjects(ctx, deps, ctx.match?.toString()));
+  bot.command(["projects", "project"], (ctx) => showProjects(ctx, deps, ctx.match?.toString()));
 
   bot.callbackQuery(/^proj:(\d+)$/, async (ctx) => {
     const index = Number(ctx.match![1]);
