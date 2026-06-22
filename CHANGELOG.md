@@ -20,7 +20,10 @@ The latest section is published verbatim as the GitHub Release notes by
   **`NOTIFY_OTHER_SESSIONS`** env var (default `true`); set it `false` to keep
   background sessions silent (their output still shows when you switch back).
   File operations are tracked for background turns too, so the count is accurate
-  regardless of which session you were viewing.
+  regardless of which session you were viewing. **Switching (back) into a
+  session also replays its last Done + file summary** at the end of the catch-up
+  view (so you see how it ended), and the completion line is now more compact
+  and professional — no `end_turn`/`Files:` noise, with project-relative paths.
 - **🏷 Clearer skill & MCP tool lines.** Loading a skill now shows
   **`📚 Loaded skill: <name>`** instead of a cryptic `SKILL.md:1` read line, and
   MCP/extension tool calls render as **`🧩 Call MCP <server>: <method>`** (or

@@ -57,6 +57,9 @@ export class SessionRuntime {
   /** Files touched this turn (path -> operation), tracked even in background so
    *  the completion message can summarise what changed. */
   private fileOps = new Map<string, FileOp>();
+  /** The full Done/summary of the most recent finished turn, replayed when you
+   *  switch (back) into this session so you see how it ended. */
+  private lastCompletion: string | undefined;
   /** Subagent sessionId -> last status key shown this turn (dedupe). */
   private subagentShown = new Map<string, string>();
   private turnStartedAt = 0;
@@ -119,6 +122,11 @@ export class SessionRuntime {
   }
   get isForeground(): boolean {
     return this.foreground;
+  }
+
+  /** The Done/summary of this session's most recent finished turn, if any. */
+  get lastTurnSummary(): string | undefined {
+    return this.lastCompletion;
   }
 
   /** Switch live-streaming on/off. Going background seals any in-flight turn;
@@ -435,30 +443,26 @@ export class SessionRuntime {
       const streamedOutput = this.streamer?.hasOutput ?? false;
       if (this.streamer) await this.streamer.finalize();
       if (this.foreground) await this.sendTurnImages();
-      // The completion / error message is sent for the foreground turn always,
-      // and for a background turn only when NOTIFY_OTHER_SESSIONS is on — so a
-      // task you left running while viewing another session still pings you.
-      if (this.foreground || this.cfg.notifyOtherSessions) {
-        if (outcome.result || this.cancelled) {
-          await this.notify(this.completionMessage(outcome.result?.stopReason, startedAt, streamedOutput), {
-            loud: true,
-          });
-        } else if (outcome.error) {
-          const transient = isTransientAcpError(outcome.error);
-          await this.notify(this.errorMessage(outcome.error, startedAt, outcome.attempts, transient), {
-            loud: true,
-          });
-        }
+      // Always build the completion (records `lastCompletion` so switching back
+      // to this session can replay its Done + summary). Only PING the chat for
+      // the foreground turn, or a background turn when NOTIFY_OTHER_SESSIONS is on.
+      const canPing = this.foreground || this.cfg.notifyOtherSessions;
+      if (outcome.result || this.cancelled) {
+        const live = this.completionMessage(outcome.result?.stopReason, startedAt, streamedOutput);
+        if (canPing) await this.notify(live, { loud: true });
+      } else if (outcome.error) {
+        const transient = isTransientAcpError(outcome.error);
+        const live = this.errorMessage(outcome.error, startedAt, outcome.attempts, transient);
+        if (canPing) await this.notify(live, { loud: true });
       }
     } catch (err) {
       // Unexpected failure outside the prompt path (e.g. while finalizing).
       await this.streamer?.finalize().catch(() => {});
+      const msg = `\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`;
+      this.lastCompletion = msg;
       if (this.foreground || this.cfg.notifyOtherSessions) {
         const from = this.foreground ? "" : `\u{1F4E8} From other session ${this.sessionTag()}\n`;
-        await this.notify(
-          `${from}\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`,
-          { loud: true },
-        );
+        await this.notify(`${from}${msg}`, { loud: true });
       }
     } finally {
       this.typing.stop();
@@ -561,35 +565,37 @@ export class SessionRuntime {
     }
   }
 
-  /** Build the "turn finished" message. The foreground turn gets the full
-   *  file list; a background turn gets a clearly-labelled "other session" ping
-   *  with a short counts-only summary. */
+  /** Build the "turn finished" message and record `lastCompletion` (the full
+   *  in-session version with the file list). Foreground gets the full version;
+   *  a background turn gets a labelled "other session" ping with short counts. */
   private completionMessage(stopReason: string | undefined, startedAt: number, streamedOutput: boolean): string {
-    const elapsed = fmtDuration(Date.now() - startedAt);
-    let head: string;
-    if (this.cancelled || stopReason === "cancelled") {
-      head = `\u23F9 Stopped \u00B7 ${elapsed}`;
-    } else {
-      const reason = stopReason || "end_turn";
-      const ctx = this.contextInfo()?.contextUsagePercentage;
-      const ctxStr = ctx !== undefined ? ` \u00B7 ctx ${ctx.toFixed(0)}%` : "";
-      // Only claim "no text output" when we were actually streaming (foreground);
-      // a background turn's prose lands in its log, not here.
-      const noOut = this.foreground && !streamedOutput ? " \u00B7 no text output" : "";
-      head = `\u2705 Done \u00B7 ${reason} \u00B7 ${elapsed}${ctxStr}${noOut}`;
-    }
-    if (this.foreground) return `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}`;
+    const head = this.doneHead(stopReason, startedAt, streamedOutput);
+    const full = `${head}\n${summarizeFileOps(this.fileOps, this.cwd)}`;
+    this.lastCompletion = full;
+    if (this.foreground) return full;
     return `\u{1F4E8} From other session ${this.sessionTag()}\n${head}\n${summarizeFileOpsShort(this.fileOps)}`;
   }
 
-  /** Build the turn-failed message (foreground: full; background: labelled + short). */
+  /** The compact one-line status of a finished turn (no "end_turn" noise). */
+  private doneHead(stopReason: string | undefined, startedAt: number, streamedOutput: boolean): string {
+    const elapsed = fmtDuration(Date.now() - startedAt);
+    if (this.cancelled || stopReason === "cancelled") return `\u23F9 Stopped \u00B7 ${elapsed}`;
+    const reason = stopReason && stopReason !== "end_turn" ? ` \u00B7 ${stopReason}` : "";
+    const ctx = this.contextInfo()?.contextUsagePercentage;
+    const ctxStr = ctx !== undefined ? ` \u00B7 ctx ${ctx.toFixed(0)}%` : "";
+    // Only claim "no text output" when we were actually streaming (foreground).
+    const noOut = this.foreground && !streamedOutput ? " \u00B7 no text output" : "";
+    return `\u2705 Done${reason} \u00B7 ${elapsed}${ctxStr}${noOut}`;
+  }
+
+  /** Build the turn-failed message and record `lastCompletion`. */
   private errorMessage(error: Error, startedAt: number, attempts: number, transient: boolean): string {
     const summary = formatErrorSummary(error, fmtDuration(Date.now() - startedAt), attempts, transient);
-    if (this.foreground) {
-      return this.fileOps.size > 0 ? `${summary}\n${summarizeFileOps(this.fileOps, this.cwd)}` : summary;
-    }
-    const files = this.fileOps.size > 0 ? `\n${summarizeFileOpsShort(this.fileOps)}` : "";
-    return `\u{1F4E8} From other session ${this.sessionTag()}\n${summary}${files}`;
+    const files = this.fileOps.size > 0 ? `\n${summarizeFileOps(this.fileOps, this.cwd)}` : "";
+    this.lastCompletion = `${summary}${files}`;
+    if (this.foreground) return this.lastCompletion;
+    const shortFiles = this.fileOps.size > 0 ? `\n${summarizeFileOpsShort(this.fileOps)}` : "";
+    return `\u{1F4E8} From other session ${this.sessionTag()}\n${summary}${shortFiles}`;
   }
 
   /** "[project · 1a2b3c4d]" — identifies which background session a ping is from. */

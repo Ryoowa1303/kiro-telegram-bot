@@ -153,6 +153,12 @@ async function deliverSwitch(ctx: Context, deps: BotDeps, res: SwitchResult): Pr
     : `\u{1F4EC} **${res.unread.length} message(s) while away** \u2014 ${proj}`;
   const body = res.unread.map(fmtEntry).join("\n\n");
   await sendMarkdownDoc(deps.api, ctx.chat!.id, `${header}\n\n${body}`);
+
+  // Replay how the session's last turn ended (Done + file summary) — this isn't
+  // in the .jsonl, so it's the footer you'd have seen had you been watching.
+  if (!res.busy && res.rt.lastTurnSummary) {
+    await ctx.reply(res.rt.lastTurnSummary);
+  }
 }
 
 function fmtEntry(e: HistoryEntry): string {

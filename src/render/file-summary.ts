@@ -63,7 +63,7 @@ export function summarizeFileOps(ops: Map<string, FileOp>, cwd: string, maxList 
   const shown = entries.slice(0, maxList).map(([p, op]) => `${SIGN[op]} ${rel(cwd, p)}`);
   const more = entries.length > maxList ? `\n  \u2026and ${entries.length - maxList} more` : "";
 
-  return `\u{1F4DD} Files: ${countsLine(ops)}\n  ${shown.join("\n  ")}${more}`;
+  return `\u{1F4DD} ${countsLine(ops)}\n  ${shown.join("\n  ")}${more}`;
 }
 
 /** Compact, one-line counts (no file list) — used for "other session" pings. */
