@@ -21,11 +21,12 @@ import { type BotDeps, MenuCache } from "./deps.js";
 import { registerControl } from "./handlers/control.js";
 import { registerHistory } from "./handlers/history.js";
 import { registerKill } from "./handlers/kill.js";
+import { registerMcp } from "./handlers/mcp.js";
 import { registerMenu } from "./handlers/menu.js";
 import { registerMessages } from "./handlers/message.js";
 import { registerPhotos } from "./handlers/photo.js";
 import { registerProjects } from "./handlers/projects.js";
-import { registerRunning } from "./handlers/running.js";
+import { registerRunning, switchAndShow } from "./handlers/running.js";
 import { registerSessions } from "./handlers/sessions.js";
 import { registerSystem } from "./handlers/system.js";
 import { registerTasks, registerWizardInput } from "./handlers/tasks.js";
@@ -38,6 +39,20 @@ import { TaskWizard } from "./wizard/task-wizard.js";
 
 const log = createLogger("bot");
 
+/** Telegram methods that support disable_notification (silenced in quiet mode). */
+const SILENCEABLE = new Set([
+  "sendMessage",
+  "sendPhoto",
+  "sendDocument",
+  "sendAudio",
+  "sendVoice",
+  "sendVideo",
+  "sendAnimation",
+  "sendMediaGroup",
+  "copyMessage",
+  "forwardMessage",
+]);
+
 export interface BotBundle {
   bot: Bot;
   registry: RuntimeRegistry;
@@ -46,6 +61,19 @@ export interface BotBundle {
 
 export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBundle> {
   const bot = new Bot(cfg.token);
+
+  // Quiet mode (default): silence every outgoing message unless the caller
+  // explicitly set disable_notification:false (turn completion, permission
+  // prompts, task results). Edits never notify, so they're unaffected.
+  if (cfg.quietNotifications) {
+    bot.api.config.use(async (prev, method, payload, signal) => {
+      if (SILENCEABLE.has(method)) {
+        const p = payload as { disable_notification?: boolean };
+        if (p.disable_notification === undefined) p.disable_notification = true;
+      }
+      return prev(method, payload, signal);
+    });
+  }
 
   const settings = new SettingsStore(cfg.dataDir);
   const store = new SessionStore(cfg.sessionsDir);
@@ -90,6 +118,12 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
     await ctx.editMessageText(label ? `\u{1F510} ${label}` : "\u{1F510} (expired)").catch(() => {});
   });
 
+  bot.callbackQuery(/^permsw:(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const sid = permissions.sessionFor(ctx.match![1]!);
+    if (sid) await switchAndShow(ctx, deps, sid);
+  });
+
   registerMenu(bot, deps); // persistent-keyboard buttons (hears)
   registerWizardInput(bot, deps); // wizard text input (before commands)
   registerControl(bot, deps);
@@ -100,6 +134,7 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
   registerSystem(bot, deps);
   registerUsage(bot, deps);
   registerKill(bot, deps);
+  registerMcp(bot, deps);
   registerTasks(bot, deps);
   registerPhotos(bot, deps); // photos & image documents
   registerVoice(bot, deps); // voice / audio -> transcription -> prompt

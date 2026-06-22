@@ -64,11 +64,18 @@ export interface AppConfig {
   acpAutoRestart: boolean;
   dataDir: string;
   promptIdleMs: number;
+  quietNotifications: boolean;
   promptRetryAttempts: number;
   sttApiUrl?: string;
   sttApiKey?: string;
   sttModel: string;
   sttLanguage?: string;
+  /** Per-server timeout for the /mcp live health probe. */
+  mcpProbeTimeoutMs: number;
+  /** How many MCP health probes run concurrently. */
+  mcpProbeConcurrency: number;
+  /** Show subagent (crew) activity while the main agent waits on them. */
+  showSubagents: boolean;
 }
 
 export function loadConfig(): AppConfig {
@@ -117,6 +124,7 @@ export function loadConfig(): AppConfig {
     logFile,
     acpAutoRestart: bool(process.env.ACP_AUTO_RESTART, true),
     promptIdleMs: num(process.env.PROMPT_IDLE_TIMEOUT_MS, 900_000),
+    quietNotifications: bool(process.env.QUIET_NOTIFICATIONS, true),
     promptRetryAttempts: nonNegNum(process.env.PROMPT_RETRY_ATTEMPTS, 5),
     dataDir: process.env.DATA_DIR?.trim()
       ? resolve(expandHome(process.env.DATA_DIR.trim()))
@@ -125,6 +133,9 @@ export function loadConfig(): AppConfig {
     sttApiKey: process.env.STT_API_KEY?.trim() || undefined,
     sttModel: process.env.STT_MODEL?.trim() || "whisper-1",
     sttLanguage: process.env.STT_LANGUAGE?.trim() || undefined,
+    mcpProbeTimeoutMs: num(process.env.MCP_PROBE_TIMEOUT_MS, 8000),
+    mcpProbeConcurrency: num(process.env.MCP_PROBE_CONCURRENCY, 6),
+    showSubagents: bool(process.env.SHOW_SUBAGENTS, true),
   };
 
   return cfg;

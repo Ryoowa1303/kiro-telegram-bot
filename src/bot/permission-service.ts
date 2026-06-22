@@ -1,8 +1,9 @@
 /**
- * PermissionService — when Kiro is NOT in trust-all mode it asks the client to
- * approve risky tool calls (file writes, shell commands…). This turns each
- * ACP `session/request_permission` into inline Approve/Deny buttons and resolves
- * the request with the user's choice.
+ * PermissionService — turns Kiro's ACP `session/request_permission` into inline
+ * Approve/Deny buttons. It names the session that needs approval, sends the
+ * prompt WITH sound (it requires interaction), and — when the request belongs to
+ * a *background* session — adds a "🔀 Switch to it" button. The Allow/Deny
+ * buttons resolve the request in place, without switching.
  */
 import type { Api } from "grammy";
 import { InlineKeyboard } from "grammy";
@@ -26,6 +27,7 @@ interface Pending {
   resolve: (o: PermissionOutcome) => void;
   options: RequestPermissionParams["options"];
   chatId: number;
+  sessionId: string;
   messageId?: number;
   timer: NodeJS.Timeout;
 }
@@ -41,16 +43,35 @@ export class PermissionService {
 
   /** Handle a permission request: ask the owning chat, or auto-allow if none. */
   async handle(params: RequestPermissionParams): Promise<PermissionOutcome> {
-    const chatId = this.registry.findChatBySession(params.sessionId);
-    if (chatId === undefined) return autoDecide(params); // unattended (e.g. scheduled task)
+    const desc = this.registry.describeSession(params.sessionId);
+    const chatId = desc.chatId;
+    if (chatId === undefined) return autoDecide(params); // unattended (e.g. scheduled task / orphan subagent)
 
     const reqId = String(++this.seq);
+    const isForeground = !desc.subagent && this.registry.get(chatId).sessionId === params.sessionId;
+    // A "Switch to it" button only makes sense for a real, controlled background
+    // session — never for the foreground, and never for a subagent (which the
+    // chat doesn't control directly).
+    const canSwitch = desc.controlled && !isForeground;
+    const label = desc.subagent
+      ? desc.subagentName || "subagent"
+      : desc.projectName || params.sessionId.slice(0, 8);
+
     const kb = new InlineKeyboard();
-    params.options.forEach((o, i) => kb.text(buttonLabel(o), `perm:${reqId}:${i}`).row());
+    params.options.forEach((o, i) => kb.text(buttonLabel(o), `perm:${reqId}:${i}`));
+    kb.row();
+    if (canSwitch) kb.text(`\u{1F500} Switch to ${label}`, `permsw:${reqId}`);
 
     let messageId: number | undefined;
     try {
-      const msg = await this.api.sendMessage(chatId, describe(params), { reply_markup: kb });
+      const msg = await this.api.sendMessage(
+        chatId,
+        describe(params, { label: isForeground ? undefined : label, subagent: desc.subagent, canSwitch }),
+        {
+          reply_markup: kb,
+          disable_notification: false, // requires interaction → always with sound
+        },
+      );
       messageId = msg.message_id;
     } catch (e) {
       log.warn("failed to send permission prompt:", (e as Error).message);
@@ -60,12 +81,10 @@ export class PermissionService {
     return new Promise<PermissionOutcome>((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(reqId);
-        void this.api
-          .editMessageText(chatId, messageId!, "\u231B Approval timed out \u2014 denied.")
-          .catch(() => {});
+        void this.api.editMessageText(chatId, messageId!, "\u231B Approval timed out \u2014 denied.").catch(() => {});
         resolve({ outcome: { outcome: "cancelled" } });
       }, TIMEOUT_MS);
-      this.pending.set(reqId, { resolve, options: params.options, chatId, messageId, timer });
+      this.pending.set(reqId, { resolve, options: params.options, chatId, sessionId: params.sessionId, messageId, timer });
     });
   }
 
@@ -83,9 +102,17 @@ export class PermissionService {
     p.resolve({ outcome: { outcome: "selected", optionId: opt.optionId } });
     return opt.name;
   }
+
+  /** The session a pending request belongs to (for the Switch button). */
+  sessionFor(reqId: string): string | undefined {
+    return this.pending.get(reqId)?.sessionId;
+  }
 }
 
-function describe(params: RequestPermissionParams): string {
+function describe(
+  params: RequestPermissionParams,
+  ctx: { label?: string; subagent: boolean; canSwitch: boolean },
+): string {
   const tc = params.toolCall;
   const kind = (tc?.kind || "other").toLowerCase();
   const icon = KIND_ICON[kind] ?? "\u{1F527}";
@@ -94,7 +121,17 @@ function describe(params: RequestPermissionParams): string {
   const cmd = typeof raw.command === "string" ? raw.command : undefined;
   const path = typeof raw.path === "string" ? raw.path : undefined;
   const detail = cmd ? `\n\n$ ${cmd}` : path ? `\n\n${path}` : "";
-  return `\u{1F510} Kiro wants to run a tool:\n${icon} ${title}${detail}\n\nApprove?`;
+  const who = ctx.subagent
+    ? `\u{1F916}\u{1F510} Subagent "${ctx.label}" needs approval to run a tool:`
+    : ctx.label
+      ? `\u{1F510} Session "${ctx.label}" needs approval to run a tool:`
+      : "\u{1F510} Kiro wants to run a tool:";
+  const tail = ctx.canSwitch
+    ? "\n\nApprove here (no switch), or \u{1F500} switch to that session."
+    : ctx.subagent
+      ? "\n\nApprove for the subagent to continue?"
+      : "\n\nApprove?";
+  return `${who}\n${icon} ${title}${detail}${tail}`;
 }
 
 function buttonLabel(o: { name: string; kind?: string }): string {

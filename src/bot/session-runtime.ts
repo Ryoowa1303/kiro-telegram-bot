@@ -4,6 +4,7 @@
  * and per-chat preferences (project, agent, model, reasoning). State persists
  * to the settings store so it survives restarts.
  */
+import { join } from "node:path";
 import type { Api } from "grammy";
 import { type AcpClient, isTransientAcpError } from "../acp/client.js";
 import type { ContentBlock, PromptResult, SessionUpdate } from "../acp/types.js";
@@ -12,10 +13,12 @@ import { reasoningDirective } from "../app/reasoning.js";
 import type { SettingsStore } from "../app/settings-store.js";
 import { type PromptInput, type ReasoningEffort, textPrompt } from "../app/types.js";
 import { createLogger } from "../logger.js";
-import { buildTranscript } from "../sessions/history.js";
+import { buildTranscript, readHistory } from "../sessions/history.js";
 import { TailWatcher } from "../sessions/tail.js";
 import type { HistoryEntry } from "../sessions/types.js";
 import { formatToolCall } from "../render/tool-call.js";
+import { isActiveStatus, renderSubagentTransition, statusKey } from "../render/subagent.js";
+import type { PendingStage, SubagentInfo } from "../acp/types.js";
 import { ResponseStreamer } from "../stream/streamer.js";
 import { extractImagePaths, sendImages } from "./image-return.js";
 import { buildContentBlocks, mergeInputs } from "./prompt-content.js";
@@ -50,18 +53,26 @@ export class SessionRuntime {
   private streamer: ResponseStreamer | undefined;
   private readonly typing: TypingIndicator;
   private shownToolIds = new Set<string>();
+  /** Subagent sessionId -> last status key shown this turn (dedupe). */
+  private subagentShown = new Map<string, string>();
   private turnStartedAt = 0;
   private imageScanText = "";
   private sentImagesThisTurn = new Set<string>();
   private readonly listener: (sessionId: string, update: SessionUpdate) => void;
   private primingContext: string | undefined;
   private watcher: TailWatcher | undefined;
+  /** True when the active watch is a transient "follow" of this session's own
+   *  in-flight turn (started on switch) rather than an explicit /watch of
+   *  another session — follow-watches are auto-stopped when a new turn streams. */
+  private watchIsFollow = false;
   private rebindPending = false;
   private sessionLive = false;
   /** Only the foreground runtime streams to Telegram; background ones stay quiet
    *  (their output lands in the session's .jsonl and shows as "unread" on switch). */
   private foreground = true;
   private readonly restartListener: () => void;
+  /** Invoked when this runtime starts/stops a turn (for subagent attribution). */
+  onActivity: ((busy: boolean) => void) | undefined;
 
   constructor(
     private readonly api: Api,
@@ -106,11 +117,24 @@ export class SessionRuntime {
     return this.foreground;
   }
 
-  /** Switch live-streaming on/off. Going background seals any in-flight turn. */
+  /** Switch live-streaming on/off. Going background seals any in-flight turn;
+   *  returning to the foreground while a turn is still running resumes RICH
+   *  live streaming (thinking / tools / prose) rather than a degraded tail. */
   async setForeground(value: boolean): Promise<void> {
     if (this.foreground === value) return;
     this.foreground = value;
-    if (!value) {
+    if (value) {
+      // A turn was started here and is still in flight, but its streamer was
+      // finalized when we went background. Recreate it and let onUpdate feed
+      // the remaining chunks/thoughts/tools just like a normal live turn — we
+      // own the agent's session/update events, so no tail-watch is needed.
+      if (this.busy && !this.streamer) {
+        // Any transient follow-watch of this session is now superseded.
+        if (this.watchIsFollow) this.stopWatch();
+        this.streamer = new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs);
+        this.typing.start();
+      }
+    } else {
       this.typing.stop();
       this.stopWatch();
       if (this.streamer) {
@@ -197,8 +221,9 @@ export class SessionRuntime {
     }
   }
 
-  startWatch(jsonlPath: string): void {
+  startWatch(jsonlPath: string, follow = false): void {
     this.stopWatch();
+    this.watchIsFollow = follow;
     this.watcher = new TailWatcher(jsonlPath, (entries) => void this.onWatchEntries(entries));
     this.watcher.start(true);
   }
@@ -207,6 +232,7 @@ export class SessionRuntime {
     if (!this.watcher) return false;
     this.watcher.stop();
     this.watcher = undefined;
+    this.watchIsFollow = false;
     return true;
   }
 
@@ -313,29 +339,85 @@ export class SessionRuntime {
 
   private async ensureSession(): Promise<void> {
     if (this.rebindPending && this.sessionId) {
-      this.rebindPending = false;
-      try {
-        await this.acp.loadSession(this.sessionId, this.cwd);
+      // The ACP process is frequently mid-restart the first time we re-bind
+      // (auto-restart after a crash, or a fresh bot boot), so a single attempt
+      // is flaky. Retry briefly before giving up.
+      if (await this.rebindWithRetries(this.sessionId)) {
         this.sessionLive = true;
+        this.rebindPending = false;
         await this.applySessionPrefs();
         log.info(`chat ${this.chatId} re-bound session ${this.sessionId.slice(0, 8)}`);
         return;
-      } catch {
-        log.warn(`re-bind failed; new session for chat ${this.chatId}`);
-        await this.startNewSession(this.cwd, this.projectName);
-        return;
       }
+      // The session genuinely can't be reloaded (its exclusive lock is held,
+      // or its log/metadata is gone). Never silently drop the conversation:
+      // fork a linked continuation primed with the recent transcript so the
+      // thread survives — including any question the agent had just asked.
+      // forkFromLostSession() only throws if the agent is fully down, in which
+      // case we leave rebindPending set so the next message retries cleanly.
+      await this.forkFromLostSession(this.sessionId);
+      this.rebindPending = false;
+      return;
     }
     if (!this.sessionId) await this.startNewSession(this.cwd, this.projectName);
+  }
+
+  /** Reload a persisted session, retrying flaky failures with a short backoff.
+   *  Returns true once loaded, false after the attempts are exhausted. */
+  private async rebindWithRetries(sessionId: string, attempts = 4): Promise<boolean> {
+    const delays = [400, 1200, 3000]; // ≈4.6s total before giving up
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await this.acp.loadSession(sessionId, this.cwd);
+        return true;
+      } catch (err) {
+        log.warn(
+          `re-bind ${sessionId.slice(0, 8)} attempt ${i + 1}/${attempts} failed: ${(err as Error).message}`,
+        );
+        if (i === attempts - 1) return false;
+        await sleep(delays[Math.min(i, delays.length - 1)]!);
+      }
+    }
+    return false;
+  }
+
+  /** Continue a session we could not reload by forking a fresh one primed with
+   *  the lost session's recent transcript, so no context is dropped. */
+  private async forkFromLostSession(lostId: string): Promise<void> {
+    let transcript = "";
+    try {
+      const entries = readHistory(join(this.cfg.sessionsDir, `${lostId}.jsonl`), 24);
+      if (entries.length > 0) transcript = buildTranscript(entries);
+    } catch {
+      /* no recoverable history on disk */
+    }
+    log.warn(
+      `chat ${this.chatId} could not reload ${lostId.slice(0, 8)}; forking a linked continuation` +
+        (transcript ? " (primed with recent transcript)" : ""),
+    );
+    await this.startNewSession(this.cwd, this.projectName); // sets a fresh, live sessionId
+    if (transcript) this.primingContext = buildPriming(transcript);
+    if (this.foreground) {
+      await this.notify(
+        transcript
+          ? "\u{1F517} Couldn't reopen the previous session, so I started a linked continuation primed with the recent transcript \u2014 we can keep going from where we left off."
+          : "\u{1F517} Couldn't reopen the previous session, so I started a fresh one here.",
+      );
+    }
   }
 
   private async runTurn(input: PromptInput): Promise<void> {
     this.busy = true;
     this.cancelled = false;
     this.shownToolIds = new Set();
+    this.subagentShown = new Map();
+    // A new streamed turn supersedes any transient "follow" watch of this same
+    // session's previous in-flight turn (avoids duplicated output).
+    if (this.watchIsFollow) this.stopWatch();
     const live = this.foreground;
     this.streamer = live ? new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs) : undefined;
     if (live) this.typing.start();
+    this.activity(true);
     this.changed();
     const startedAt = Date.now();
     this.turnStartedAt = startedAt;
@@ -354,11 +436,12 @@ export class SessionRuntime {
       if (this.foreground) {
         await this.sendTurnImages();
         if (outcome.result || this.cancelled) {
-          await this.notify(this.completionLine(outcome.result?.stopReason, startedAt));
+          await this.notify(this.completionLine(outcome.result?.stopReason, startedAt), { loud: true });
         } else if (outcome.error) {
           const transient = isTransientAcpError(outcome.error);
           await this.notify(
             formatErrorSummary(outcome.error, fmtDuration(Date.now() - startedAt), outcome.attempts, transient),
+            { loud: true },
           );
         }
       }
@@ -366,16 +449,48 @@ export class SessionRuntime {
       // Unexpected failure outside the prompt path (e.g. while finalizing).
       await this.streamer?.finalize().catch(() => {});
       if (this.foreground) {
-        await this.notify(`\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`);
+        await this.notify(`\u274C Error after ${fmtDuration(Date.now() - startedAt)}: ${(err as Error).message}`, {
+          loud: true,
+        });
       }
     } finally {
       this.typing.stop();
       this.streamer = undefined;
       this.busy = false;
+      this.activity(false);
+      // The in-flight turn we may have been following live is over.
+      if (this.watchIsFollow) this.stopWatch();
       this.changed();
     }
 
     await this.flushQueue();
+  }
+
+  private activity(busy: boolean): void {
+    try {
+      this.onActivity?.(busy);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  /**
+   * Show subagent ("crew") status transitions for the given (already
+   * chat-attributed) subagents, so the user sees progress while the main agent
+   * waits on them. No-op unless this runtime is the live foreground turn.
+   */
+  renderSubagents(subagents: SubagentInfo[], _pending: PendingStage[]): void {
+    if (!this.cfg.showSubagents) return;
+    if (!this.foreground || !this.busy || !this.streamer) return;
+    for (const s of subagents) {
+      const key = statusKey(s);
+      const prev = this.subagentShown.get(s.sessionId);
+      if (prev === key) continue;
+      const kind: "start" | "status" = prev === undefined && isActiveStatus(key) ? "start" : "status";
+      this.subagentShown.set(s.sessionId, key);
+      const md = renderSubagentTransition(s, kind);
+      if (md) this.streamer.addTool(md);
+    }
   }
 
   /**
@@ -507,9 +622,9 @@ export class SessionRuntime {
     }
   }
 
-  private async notify(text: string): Promise<void> {
+  private async notify(text: string, opts?: { loud?: boolean }): Promise<void> {
     try {
-      await this.api.sendMessage(this.chatId, text);
+      await this.api.sendMessage(this.chatId, text, opts?.loud ? { disable_notification: false } : {});
     } catch {
       /* non-fatal */
     }
