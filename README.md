@@ -252,6 +252,7 @@ Resuming an **idle** session loads it directly so you continue the exact thread.
 | `KIRO_TRUST_ALL_TOOLS` | no | `true` | Run tools without prompts. |
 | `PROJECT_ROOTS` | no | workspace parent + home | Roots for `/projects`. |
 | `STREAM_THROTTLE_MS` | no | `1200` | Live-edit interval while streaming. |
+| `MESSAGE_BATCH_MS` | no | `800` | Window to coalesce rapid text messages (e.g. a long message Telegram split at 4096 chars) into one prompt. `0` disables. |
 | `SHOW_TOOL_CALLS` | no | `true` | Show tool-call status messages. |
 | `SHOW_EDIT_DIFFS` | no | `true` | Show unified diffs for edits. |
 | `DIFF_MAX_LINES` | no | `120` | Max diff lines shown inline. |

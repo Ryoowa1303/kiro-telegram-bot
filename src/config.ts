@@ -51,6 +51,9 @@ export interface AppConfig {
   trustAllTools: boolean;
   projectRoots: string[];
   streamThrottleMs: number;
+  /** Debounce window (ms) for coalescing rapid consecutive text messages
+   *  (e.g. a long message Telegram split at 4096 chars) into one prompt. */
+  messageBatchMs: number;
   showToolCalls: boolean;
   showEditDiffs: boolean;
   diffMaxLines: number;
@@ -112,6 +115,7 @@ export function loadConfig(): AppConfig {
     trustAllTools: bool(process.env.KIRO_TRUST_ALL_TOOLS, true),
     projectRoots: [...new Set(roots)],
     streamThrottleMs: num(process.env.STREAM_THROTTLE_MS, 1500),
+    messageBatchMs: nonNegNum(process.env.MESSAGE_BATCH_MS, 800),
     showToolCalls: bool(process.env.SHOW_TOOL_CALLS, true),
     showEditDiffs: bool(process.env.SHOW_EDIT_DIFFS, true),
     diffMaxLines: num(process.env.DIFF_MAX_LINES, 120),

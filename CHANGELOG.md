@@ -7,6 +7,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The latest section is published verbatim as the GitHub Release notes by
 `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed.
 
+## [1.5.1] - Unreleased
+
+### Fixed
+
+- **🧵 Long messages split by Telegram are now stitched back together** —
+  Telegram caps a message at 4096 characters, so a long paste arrives as several
+  back-to-back messages. The bot used to treat each part as its own prompt —
+  spamming **“Queued (position 1…4)”** and even replying **“Unknown command”**
+  when a split landed on a line starting with `/`. Rapid consecutive text
+  messages are now **coalesced within a short window into a single prompt** (one
+  submission, one confirmation, in order). Tunable via `MESSAGE_BATCH_MS`
+  (default `800`; `0` disables). A genuine lone `/typo` still gets the friendly
+  “Unknown command” hint, and a failed submit now reports an error instead of
+  silently vanishing.
+
 ## [1.5.0] - 2026-06-22
 
 The **"mission control"** release — manage the agent's MCP servers and watch
