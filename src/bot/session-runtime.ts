@@ -145,7 +145,7 @@ export class SessionRuntime {
       if (this.busy && !this.streamer) {
         // Any transient follow-watch of this session is now superseded.
         if (this.watchIsFollow) this.stopWatch();
-        this.streamer = new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo);
+        this.streamer = new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo, this.hashtags());
         this.typing.start();
       }
     } else {
@@ -427,7 +427,7 @@ export class SessionRuntime {
     if (this.watchIsFollow) this.stopWatch();
     const live = this.foreground;
     this.streamer = live
-      ? new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo)
+      ? new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo, this.hashtags())
       : undefined;
     if (live) this.typing.start();
     this.activity(true);
@@ -446,7 +446,7 @@ export class SessionRuntime {
     try {
       const outcome = await this.runPromptWithRetries(content);
       const streamedOutput = this.streamer?.hasOutput ?? false;
-      if (this.streamer) await this.streamer.finalize(this.hashtags());
+      if (this.streamer) await this.streamer.finalize();
       if (this.foreground) await this.sendTurnImages();
       // Always build the completion (records `lastCompletion` so switching back
       // to this session can replay its Done + summary). Only PING the chat for

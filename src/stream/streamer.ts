@@ -38,7 +38,13 @@ export class ResponseStreamer {
     private readonly chatId: number,
     private readonly throttleMs: number,
     private replyTo?: number,
+    private readonly footer?: string,
   ) {}
+
+  /** "\n\n<footer>" appended to every finished message bubble (e.g. hashtags). */
+  private footerSuffix(): string {
+    return this.footer ? `\n\n${this.footer}` : "";
+  }
 
   /** reply_parameters for the FIRST message only (threads the reply to the
    *  prompt), then cleared so later chunks/edits don't repeat it. */
@@ -71,14 +77,10 @@ export class ResponseStreamer {
     return this.liveId !== undefined || this.segs.some((s) => s.text.trim().length > 0);
   }
 
-  async finalize(footer?: string): Promise<void> {
+  async finalize(): Promise<void> {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
-    // Append a footer (e.g. searchable hashtags) to the tail of the response —
-    // but only if the agent actually produced output, so we never send a
-    // message that is just tags.
-    if (footer && this.hasOutput) this.segs.push({ kind: "out", text: footer });
     await this.flush(true);
   }
 
@@ -110,8 +112,11 @@ export class ResponseStreamer {
     this.dirty = false;
     try {
       await this.sealOverflow();
-      const src = renderSegs(this.segs.slice(this.sealedIdx));
-      if (!src.trim()) return;
+      const base = renderSegs(this.segs.slice(this.sealedIdx));
+      if (!base.trim()) return;
+      // The live message gets the footer (hashtags) only once it's the final
+      // bubble — appending it during streaming would make it flicker/move.
+      const src = this.closed ? `${base}${this.footerSuffix()}` : base;
       const rendered = toTelegramMarkdown(src);
       const chunks = chunkMarkdown(rendered);
       const plain = chunkMarkdown(src);
@@ -148,8 +153,10 @@ export class ResponseStreamer {
   }
 
   private async seal(from: number, to: number): Promise<void> {
-    const src = renderSegs(this.segs.slice(from, to));
-    if (!src.trim()) return;
+    const base = renderSegs(this.segs.slice(from, to));
+    if (!base.trim()) return;
+    // A sealed bubble is finished, so it carries the footer (hashtags).
+    const src = `${base}${this.footerSuffix()}`;
     const chunks = chunkMarkdown(toTelegramMarkdown(src));
     const plain = chunkMarkdown(src);
     for (let i = 0; i < chunks.length; i++) {

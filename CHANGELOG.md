@@ -22,9 +22,10 @@ The latest section is published verbatim as the GitHub Release notes by
 - **🏷 Threaded replies + searchable hashtags.** Every agent message — the
   streamed response and the Done line — is now sent as a **reply to your prompt**,
   so each turn is visually threaded to what you asked (your prompt is left
-  untouched). The response also ends with `#proj_… #sess_… #model_… #reason_…`;
-  tap a tag to pull up every message for that project / session / model /
-  reasoning level. Works for text, voice and photo prompts.
+  untouched). **Every message bubble** of the response ends with
+  `#proj_… #sess_… #model_… #reason_…` (a long, multi-bubble response is tagged on
+  each bubble), so tapping a tag pulls up every message for that project /
+  session / model / reasoning level. Works for text, voice and photo prompts.
 
 - **🗂 Open any folder / safer project creation (`/projects`).** `/projects <path>`
   now opens a session in **any existing folder** — `C:\work\app`, `/home/me/app`,
