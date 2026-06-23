@@ -3,6 +3,7 @@
  * Reads only the tail of large logs to stay fast.
  */
 import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { extractProgress, PROGRESS_DIRECTIVE } from "../render/progress.js";
 import type { HistoryEntry, HistoryRole } from "./types.js";
 
 const TAIL_WINDOWS = [256 * 1024, 1024 * 1024, 4 * 1024 * 1024]; // grow until entries found
@@ -141,7 +142,7 @@ function toEntry(ev: RawEvent): HistoryEntry | undefined {
   const role = roleOf(ev.kind);
   if (!role) return undefined;
 
-  const text = extractText(ev.data?.content);
+  const text = cleanStoredText(extractText(ev.data?.content));
   const tool = ev.data?.tool_name || ev.data?.name;
   if (!text && !tool) return undefined;
 
@@ -151,6 +152,16 @@ function toEntry(ev: RawEvent): HistoryEntry | undefined {
     tool,
     timestamp: ev.data?.meta?.timestamp,
   };
+}
+
+/** Strip the `{progress: N%}` markers (any role) and the appended progress
+ *  directive (user prompts) from persisted text so history / unread / previews
+ *  / fork-priming never surface the raw plumbing. */
+function cleanStoredText(text: string): string {
+  if (!text) return text;
+  let t = extractProgress(text).cleaned;
+  if (t.includes(PROGRESS_DIRECTIVE)) t = t.split(PROGRESS_DIRECTIVE).join("").trim();
+  return t;
 }
 
 function roleOf(kind?: string): HistoryRole | undefined {

@@ -8,6 +8,7 @@ import type { RunningSession, SwitchResult } from "../chat-controller.js";
 import type { BotDeps } from "../deps.js";
 import type { HistoryEntry } from "../../sessions/types.js";
 import { jsonlMtimeMs, readFirstPrompt } from "../../sessions/history.js";
+import { progressBar } from "../../render/progress.js";
 import { refreshMenu } from "../menu/refresh.js";
 import { sendMarkdownDoc } from "../telegram-io.js";
 
@@ -71,6 +72,7 @@ function buildRunningCard(s: RunningSession, deps: BotDeps, now: number): { text
     prompt ? `\u{1F4AC} \u201C${trunc(prompt, 120)}\u201D` : "\u{1F4AC} (no messages yet)",
     `\u{1F552} ${meta.join(" \u00B7 ")}`,
   ];
+  if (s.progress !== undefined) lines.push(`\u{1F4C8} ${progressBar(s.progress)}`);
   if (s.sessionId) lines.push(`\u{1F194} ${s.sessionId.slice(0, 8)}`);
 
   const kb = new InlineKeyboard();

@@ -3,13 +3,10 @@
  * holding a live session lock), excluding the bot's own agent process. Guarded
  * by an inline confirmation since it kills processes.
  */
-import { execFileSync } from "node:child_process";
 import { type Bot, type Context, InlineKeyboard } from "grammy";
-import { createLogger } from "../../logger.js";
+import { killPid } from "../../sessions/process.js";
 import type { SessionMeta } from "../../sessions/types.js";
 import type { BotDeps } from "../deps.js";
-
-const log = createLogger("killall");
 
 function targets(deps: BotDeps): SessionMeta[] {
   const self = deps.acp.pid;
@@ -54,18 +51,4 @@ export function registerKill(bot: Bot, deps: BotDeps): void {
     }
     await ctx.editMessageText(`\u{1F6D1} Killed ${killed} of ${active.length} active session(s).`).catch(() => {});
   });
-}
-
-function killPid(pid: number): boolean {
-  try {
-    if (process.platform === "win32") {
-      execFileSync("taskkill", ["/F", "/T", "/PID", String(pid)], { stdio: "ignore" });
-    } else {
-      process.kill(pid, "SIGKILL");
-    }
-    return true;
-  } catch (e) {
-    log.debug(`kill ${pid} failed:`, (e as Error).message);
-    return false;
-  }
 }

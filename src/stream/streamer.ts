@@ -13,6 +13,7 @@
 import type { Api } from "grammy";
 import { chunkMarkdown } from "../render/chunk.js";
 import { toTelegramMarkdown } from "../render/markdown.js";
+import { extractProgress, progressBar } from "../render/progress.js";
 import { safeEdit, safeSend } from "../bot/telegram-io.js";
 
 const SOFT_LIMIT = 3500;
@@ -32,6 +33,9 @@ export class ResponseStreamer {
   private dirty = false;
   private flushing = false;
   private closed = false;
+  /** Latest task-progress % parsed from the agent's `{progress: N%}` markers
+   *  (sticky across flushes; rendered as a bar on the live message). */
+  private progress: number | undefined;
 
   constructor(
     private readonly api: Api,
@@ -39,6 +43,7 @@ export class ResponseStreamer {
     private readonly throttleMs: number,
     private replyTo?: number,
     private footer?: string,
+    private readonly onProgress?: (pct: number) => void,
   ) {}
 
   /** Replace the hashtag footer (used after a logical fork swaps the session id
@@ -50,6 +55,21 @@ export class ResponseStreamer {
   /** "\n\n<footer>" appended to every finished message bubble (e.g. hashtags). */
   private footerSuffix(): string {
     return this.footer ? `\n\n${this.footer}` : "";
+  }
+
+  /** Strip `{progress: N%}` markers from rendered text, remembering the latest
+   *  value (sticky across flushes) and notifying the owner when it changes. */
+  private captureProgress(text: string): string {
+    const { value, cleaned } = extractProgress(text);
+    if (value !== undefined && value !== this.progress) {
+      this.progress = value;
+      try {
+        this.onProgress?.(value);
+      } catch {
+        /* non-fatal */
+      }
+    }
+    return cleaned;
   }
 
   /** reply_parameters threading EVERY message of the turn to the user's prompt,
@@ -117,11 +137,14 @@ export class ResponseStreamer {
     this.dirty = false;
     try {
       await this.sealOverflow();
-      const base = renderSegs(this.segs.slice(this.sealedIdx));
-      if (!base.trim()) return;
-      // Every bubble — including the still-streaming live one — carries the
-      // hashtag footer so the thinking/first response is tagged immediately.
-      const src = `${base}${this.footerSuffix()}`;
+      const base = this.captureProgress(renderSegs(this.segs.slice(this.sealedIdx)));
+      if (!base.trim() && this.progress === undefined) return;
+      // The live (still-streaming) bubble carries the hashtag footer AND a fresh
+      // progress bar at the bottom (sealed bubbles below get neither bar).
+      const parts: string[] = [];
+      if (base.trim()) parts.push(base);
+      if (this.progress !== undefined) parts.push(progressBar(this.progress));
+      const src = `${parts.join("\n\n")}${this.footerSuffix()}`;
       const rendered = toTelegramMarkdown(src);
       const chunks = chunkMarkdown(rendered);
       const plain = chunkMarkdown(src);
@@ -158,7 +181,7 @@ export class ResponseStreamer {
   }
 
   private async seal(from: number, to: number): Promise<void> {
-    const base = renderSegs(this.segs.slice(from, to));
+    const base = this.captureProgress(renderSegs(this.segs.slice(from, to)));
     if (!base.trim()) return;
     // A sealed bubble is finished, so it carries the footer (hashtags).
     const src = `${base}${this.footerSuffix()}`;

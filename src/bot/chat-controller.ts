@@ -20,6 +20,8 @@ export interface RunningSession {
   busy: boolean;
   foreground: boolean;
   unread: number;
+  /** Latest task-completion % (0–100) for this session, if known. */
+  progress?: number;
 }
 
 export interface SwitchResult {
@@ -71,6 +73,7 @@ export class ChatController {
       busy: rt.isBusy,
       foreground: rt.isForeground,
       unread: this.unreadCount(rt),
+      progress: rt.taskProgress,
     }));
   }
 
@@ -186,6 +189,13 @@ export class ChatController {
   count(): number {
     this.ensureRestored();
     return this.runtimes.length;
+  }
+
+  /** Latest task-progress % for a controlled session id, if this chat runs it. */
+  progressFor(sessionId?: string): number | undefined {
+    if (!sessionId) return undefined;
+    this.ensureRestored();
+    return this.runtimes.find((r) => r.sessionId === sessionId)?.taskProgress;
   }
 
   findBySession(sessionId: string): boolean {

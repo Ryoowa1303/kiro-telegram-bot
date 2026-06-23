@@ -52,7 +52,8 @@ async function renderSessionPage(ctx: Context, deps: BotDeps, page: number): Pro
 
   for (const m of slice) {
     const contextPct = deps.acp.metadataFor(m.sessionId)?.contextUsagePercentage;
-    const { text, keyboard } = buildSessionCard(m, { contextPct });
+    const progress = deps.registry.controller(ctx.chat!.id).progressFor(m.sessionId);
+    const { text, keyboard } = buildSessionCard(m, { contextPct, selfPid: deps.acp.pid, progress });
     await deps.ephemeral.reply(ctx, text, { reply_markup: keyboard });
   }
 

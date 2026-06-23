@@ -8,11 +8,20 @@
  */
 import { InlineKeyboard } from "grammy";
 import { basename } from "node:path";
+import { progressBar } from "../../render/progress.js";
 import type { SessionMeta } from "../../sessions/types.js";
 
 export interface SessionCardExtras {
   /** Context-usage %, when the session is loaded in the current ACP process. */
   contextPct?: number;
+  /**
+   * PID of the bot's own `kiro-cli acp` process. A session locked by this PID
+   * powers the bot itself, so its card omits the Kill button (killing it would
+   * take the bot down). Other live sessions get a 🛑 Kill button.
+   */
+  selfPid?: number;
+  /** Latest task-completion % (0–100) for this session, if this chat runs it. */
+  progress?: number;
 }
 
 export interface SessionCard {
@@ -31,6 +40,7 @@ export function buildSessionCard(m: SessionMeta, extra: SessionCardExtras = {}):
   lines.push(`\u{1F552} updated ${relTime(m.updatedAt)} \u00B7 created ${relTime(m.createdAt)}`);
   const ctx = typeof extra.contextPct === "number" ? ` \u00B7 \u{1F9E0} ctx ${Math.round(extra.contextPct)}%` : "";
   lines.push(`\u{1F4CA} ${state} \u00B7 \u{1F4DC} history ${humanSize(m.historyBytes)}${ctx}`);
+  if (typeof extra.progress === "number") lines.push(`\u{1F4C8} ${progressBar(extra.progress)}`);
   lines.push(`\u{1F194} ${m.sessionId.slice(0, 8)}`);
 
   const connect = m.active ? "\u{1F374} Continue (fork)" : "\u{1F517} Resume";
@@ -38,6 +48,12 @@ export function buildSessionCard(m: SessionMeta, extra: SessionCardExtras = {}):
     .text(connect, `sess:${m.sessionId}`)
     .text("\u{1F4DC} History", `hist:${m.sessionId}`)
     .text("\u{1F4E1} Watch", `watch:${m.sessionId}`);
+
+  // A live session running in another process can be terminated by PID. The
+  // bot's own agent (selfPid) is never offered — killing it would stop the bot.
+  if (m.active && typeof m.lockPid === "number" && m.lockPid !== extra.selfPid) {
+    keyboard.row().text(`\u{1F6D1} Kill \u00B7 pid ${m.lockPid}`, `killsess:${m.sessionId}`);
+  }
 
   return { text: lines.join("\n"), keyboard };
 }

@@ -27,6 +27,7 @@ and extended into a full multi-session client.
 | 🗂 **Projects** | `/projects` browses your folders and runs Kiro in the one you pick. |
 | ♻️ **Resume sessions** | `/sessions` lists recent Kiro sessions; tap to resume via ACP `session/load`. |
 | 🟢 **Connect to live sessions** | `/active` shows sessions running **right now** on your PC. Watch them live, or continue them — see below. |
+| 🛑 **Kill a session / PID** | Each live `/sessions` · `/active` card has a **🛑 Kill · pid N** button (confirm-guarded) that stops that session's process and its child tree; `/killall` stops them all. The bot's own agent is never killable. |
 | 📡 **Live watch** | Follow a running session read-only in real time (tails its event log). |
 | 🧭 **Always-visible menu** | A persistent keyboard plus a pinned status panel that always shows your current **project, agent, reasoning effort, model, session and queue**. |
 | ⏰ **Scheduled tasks** | Create prompts that run on a schedule (once / daily / weekly / monthly / every-N-minutes) in a chosen project, delivered back to your chat. |
@@ -34,6 +35,8 @@ and extended into a full multi-session client.
 | 📜 **History** | `/history` shows the latest messages of any session. |
 | 🧩 **MCP control** | `/mcp` lists MCP servers, **health-checks** them (which connected / failed and why), and **enables/disables** them — then restarts the agent to apply. |
 | 👥 **Subagent visibility** | When Kiro delegates to subagents and waits on them, you see each one **start / work / finish** plus a live `🤖 N running` summary — and subagent permission prompts route to your chat. |
+| 📈 **Task progress bar** | The agent appends a `{progress: N%}` marker; the bot hides it and shows a **green 0–100% loading bar** on the live message, in the status panel, and on session cards (`SHOW_PROGRESS`). |
+| 🔐 **Re-auth from chat** | `/reauth` logs out and runs a device-flow login (URL + code streamed to your chat), then restarts the agent — no terminal needed. |
 | ⌨️ **Typing indicator** | Stays on for the whole turn, even through long tool chains. |
 | 📥 **Queued follow-ups** | Message while Kiro is busy — it's queued and runs next. `/btw` runs it ASAP (now if idle, else right after the current task); `/flush` runs the queue now. |
 | ✏️ **Edit diffs** | File edits show as unified `diff` blocks with `+N -M` stats. |
@@ -52,6 +55,9 @@ and extended into a full multi-session client.
 | Switch between projects | ✅ | ❌ |
 | Resume saved sessions | ✅ | ❌ |
 | Attach to **live** PC sessions (watch / fork) | ✅ | ❌ |
+| **Kill a session by PID** (or all at once) | ✅ | ❌ |
+| **Live task-progress bars** (`{progress: N%}`) | ✅ | ❌ |
+| **Re-authenticate from chat** (`/reauth`, device flow) | ✅ | ❌ |
 | Multiple isolated sessions | ✅ | ❌ (single shared) |
 | Queued follow-ups while busy | ✅ | ❌ |
 | **Scheduled tasks** (cron-like) | ✅ | ❌ |
@@ -139,9 +145,15 @@ The platform is auto-detected:
 
 | OS | Mechanism | Starts on |
 |---|---|---|
-| Windows | Hidden Scheduled Task | logon |
+| Windows | Hidden Scheduled Task (elevated) · per-user **Startup folder** (no admin) | logon |
 | Linux | systemd **user** service (+ linger) | boot |
 | macOS | launchd LaunchAgent | login |
+
+On Windows, registering a logon-triggered Scheduled Task needs admin, so from a
+normal terminal `kiro-tg install` falls back to a hidden launcher in your
+per-user **Startup folder** (starts at logon, no elevation). Run it from an
+**elevated** terminal to use the Scheduled Task instead; either way `status`,
+`stop`, `restart` and `uninstall` work the same.
 
 ```bash
 npm run install:service     # install + start, enable autostart
@@ -182,6 +194,7 @@ Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
 /unwatch      Stop following a live session
 /model <id>   Switch the model for this session
 /restart      Restart the Kiro agent
+/reauth       Log out & log in to Kiro (device flow) · /reauth --license free|pro …
 /help         Show help
 ```
 
@@ -199,10 +212,10 @@ Sessions · Agent · Model · Reasoning · Tasks · Status · Usage · Stop · K
 The bar can be hidden (🙈) and restored (⌨️ Show bar or `/menu`).
 
 A **pinned status panel** at the top of the chat always shows your current
-**project, agent, reasoning effort, model, session id, context %, activity and
-queue** (and how many sessions the chat controls), updating live. Pick **Agent**,
-**Reasoning** or **Model** from the inline menu (reasoning steers how thoroughly
-the agent works: Minimal → Max).
+**project, agent, reasoning effort, model, session id, context %, task progress,
+activity and queue** (and how many sessions the chat controls), updating live.
+Pick **Agent**, **Reasoning** or **Model** from the inline menu (reasoning steers
+how thoroughly the agent works: Minimal → Max).
 
 ## ⏰ Scheduled tasks
 
@@ -237,6 +250,25 @@ prompt. Configure any OpenAI/Whisper-compatible endpoint via `STT_API_URL` in
 `.env`; leave `STT_LANGUAGE` blank for automatic detection (English, Russian,
 Romanian/Moldovan, and ~100 more).
 
+## 📈 Task progress
+
+The bot asks the agent to end each message with a `{progress: N%}` marker, then
+**hides the marker** and renders a **green loading bar** from 0–100 %
+(`🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ 50%`, all-green ✅ at 100 %) so you can see how far along the
+current task is. The bar appears at the bottom of the **live message**, in the
+pinned **status panel**, and on **`/running` and `/sessions` cards**. Markers are
+also stripped from history, replays and previews, so the raw plumbing never
+shows. Turn it off with `SHOW_PROGRESS=false`.
+
+## 🔐 Re-authenticating Kiro
+
+Run **`/reauth`** to log out and start a fresh **device-flow** login without
+touching a terminal: the verification URL + code are streamed into the chat
+(open them on any device), and once you're logged in the agent is restarted to
+pick up the new credentials. It's refused while a turn is running, and you can
+pass login flags through, e.g. `/reauth --license free` or
+`/reauth --license pro --region <r> --identity-provider <url>`.
+
 ---
 
 ## 🧭 Working on several sessions at once
@@ -248,7 +280,8 @@ while the others keep working quietly. When you switch to a session you see its
 recent context and **every message that arrived while you were away** (its
 unread, recovered from the session log). Leave a task running in A, hop to B,
 reply, and come back to A to read what it did. Close a session with ✖ (it isn't
-killed — see `/killall` for that).
+killed) — or tap **🛑 Kill · pid N** on its `/sessions` · `/active` card to stop
+its process (and `/killall` to stop them all).
 
 ## 🔗 Connecting to live sessions
 
@@ -283,6 +316,7 @@ Resuming an **idle** session loads it directly so you continue the exact thread.
 | `SHOW_EDIT_DIFFS` | no | `true` | Show unified diffs for edits. |
 | `DIFF_MAX_LINES` | no | `120` | Max diff lines shown inline. |
 | `SHOW_SUBAGENTS` | no | `true` | Stream subagent (crew) start/work/finish while the main agent waits. |
+| `SHOW_PROGRESS` | no | `true` | Ask the agent to append a `{progress: N%}` marker to each message; the bot parses it, hides the marker, and renders a green 0–100% bar on the live message, in session cards, and in the status panel. |
 | `NOTIFY_OTHER_SESSIONS` | no | `true` | Deliver a session's "Done" summary (with a short created/edited/deleted count) even when it's a background session, marked "From other session". `false` keeps background sessions silent. |
 | `MCP_PROBE_TIMEOUT_MS` | no | `8000` | Per-server timeout for the `/mcp` live health-check. |
 | `MCP_PROBE_CONCURRENCY` | no | `6` | How many MCP health probes run at once. |

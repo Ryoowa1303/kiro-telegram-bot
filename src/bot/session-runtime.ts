@@ -5,7 +5,7 @@
  * to the settings store so it survives restarts.
  */
 import { basename } from "node:path";
-import type { Api } from "grammy";
+import { type Api, InlineKeyboard } from "grammy";
 import { type AcpClient, isContextExhaustedError, isTransientAcpError } from "../acp/client.js";
 import type { ContentBlock, PromptResult, SessionUpdate } from "../acp/types.js";
 import type { AppConfig } from "../config.js";
@@ -15,6 +15,7 @@ import { type PromptInput, type ReasoningEffort, textPrompt } from "../app/types
 import { createLogger } from "../logger.js";
 import { buildTranscript } from "../sessions/history.js";
 import { sessionHashtags } from "../render/hashtags.js";
+import { PROGRESS_DIRECTIVE } from "../render/progress.js";
 import { buildPriming, recentTranscript } from "./session-fork.js";
 import { TailWatcher } from "../sessions/tail.js";
 import type { HistoryEntry } from "../sessions/types.js";
@@ -62,6 +63,9 @@ export class SessionRuntime {
   /** The full Done/summary of the most recent finished turn, replayed when you
    *  switch (back) into this session so you see how it ended. */
   private lastCompletion: string | undefined;
+  /** Latest task-completion % parsed from the agent's `{progress: N%}` markers,
+   *  shown as a bar in the status panel and session cards. Reset each turn. */
+  private progress: number | undefined;
   /** Subagent sessionId -> last status key shown this turn (dedupe). */
   private subagentShown = new Map<string, string>();
   private turnStartedAt = 0;
@@ -137,6 +141,18 @@ export class SessionRuntime {
     return this.lastCompletion;
   }
 
+  /** Latest task-completion % (0–100) parsed this turn, or undefined if none. */
+  get taskProgress(): number | undefined {
+    return this.progress;
+  }
+
+  /** Record a new progress value and refresh the status panel / cards. */
+  private setProgress(pct: number): void {
+    if (this.progress === pct) return;
+    this.progress = pct;
+    this.changed();
+  }
+
   /** Searchable hashtag footer for this session (project · session · model ·
    *  reasoning) — appended to every AI-output surface for this session. */
   get tags(): string {
@@ -157,7 +173,7 @@ export class SessionRuntime {
       if (this.busy && !this.streamer) {
         // Any transient follow-watch of this session is now superseded.
         if (this.watchIsFollow) this.stopWatch();
-        this.streamer = new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo, this.hashtags());
+        this.streamer = new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo, this.hashtags(), (pct) => this.setProgress(pct));
         this.typing.start();
       }
     } else {
@@ -438,12 +454,13 @@ export class SessionRuntime {
     this.shownToolIds = new Set();
     this.fileOps = new Map();
     this.subagentShown = new Map();
+    this.progress = undefined; // a new turn = a new task; clear the old bar
     // A new streamed turn supersedes any transient "follow" watch of this same
     // session's previous in-flight turn (avoids duplicated output).
     if (this.watchIsFollow) this.stopWatch();
     const live = this.foreground;
     this.streamer = live
-      ? new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo, this.hashtags())
+      ? new ResponseStreamer(this.api, this.chatId, this.cfg.streamThrottleMs, this.turnReplyTo, this.hashtags(), (pct) => this.setProgress(pct))
       : undefined;
     if (live) this.typing.start();
     this.activity(true);
@@ -456,6 +473,7 @@ export class SessionRuntime {
     const content = buildContentBlocks(input, {
       reasoning: reasoningDirective(this.reasoning),
       priming: this.primingContext,
+      progress: this.cfg.showProgress ? PROGRESS_DIRECTIVE : undefined,
     });
     this.primingContext = undefined;
 
@@ -470,13 +488,18 @@ export class SessionRuntime {
       // to this session can replay its Done + summary). Only PING the chat for
       // the foreground turn, or a background turn when NOTIFY_OTHER_SESSIONS is on.
       const canPing = this.foreground || this.cfg.notifyOtherSessions;
+      // A background session about to run a queued follow-up shouldn't ping its
+      // interim "Done" — only the final, queue-empty turn announces completion.
+      const hasQueued = this.queue.length > 0;
+      const switchKb = this.switchKeyboard();
       if (final.result || this.cancelled) {
         const live = this.completionMessage(final.result?.stopReason, startedAt, streamedOutput);
-        if (canPing) await this.notify(live, { loud: true, replyTo: this.turnReplyTo });
+        const pingDone = canPing && (this.foreground || !hasQueued);
+        if (pingDone) await this.notify(live, { loud: true, replyTo: this.turnReplyTo, replyMarkup: switchKb });
       } else if (final.error) {
         const transient = isTransientAcpError(final.error);
         const live = this.errorMessage(final.error, startedAt, final.attempts, transient);
-        if (canPing) await this.notify(live, { loud: true, replyTo: this.turnReplyTo });
+        if (canPing) await this.notify(live, { loud: true, replyTo: this.turnReplyTo, replyMarkup: switchKb });
       }
     } catch (err) {
       // Unexpected failure outside the prompt path (e.g. while finalizing).
@@ -485,7 +508,7 @@ export class SessionRuntime {
       this.lastCompletion = msg;
       if (this.foreground || this.cfg.notifyOtherSessions) {
         const from = this.foreground ? "" : `\u{1F4E8} From other session ${this.sessionTag()}\n`;
-        await this.notify(`${from}${msg}`, { loud: true, replyTo: this.turnReplyTo });
+        await this.notify(`${from}${msg}`, { loud: true, replyTo: this.turnReplyTo, replyMarkup: this.switchKeyboard() });
       }
     } finally {
       this.typing.stop();
@@ -589,6 +612,7 @@ export class SessionRuntime {
     const forkContent = buildContentBlocks(input, {
       reasoning: reasoningDirective(this.reasoning),
       priming: transcript ? buildPriming(transcript) : undefined,
+      progress: this.cfg.showProgress ? PROGRESS_DIRECTIVE : undefined,
     });
     return this.runPromptWithRetries(forkContent);
   }
@@ -708,6 +732,14 @@ export class SessionRuntime {
     return `[${name}${id}]`;
   }
 
+  /** Inline keyboard offering to switch to this session, attached to background
+   *  ("From other session") pings so you can jump straight in. Foreground turns
+   *  are already in view, so they get no button. */
+  private switchKeyboard(): InlineKeyboard | undefined {
+    if (this.foreground || !this.sessionId) return undefined;
+    return new InlineKeyboard().text("\u{1F500} Switch to this session", `run:switch:${this.sessionId}`);
+  }
+
   /** Searchable Telegram hashtags so you can pull up every message of a session
    *  or project by tapping the tag. */
   private hashtags(): string {
@@ -793,12 +825,16 @@ export class SessionRuntime {
     }
   }
 
-  private async notify(text: string, opts?: { loud?: boolean; replyTo?: number }): Promise<void> {
+  private async notify(
+    text: string,
+    opts?: { loud?: boolean; replyTo?: number; replyMarkup?: InlineKeyboard },
+  ): Promise<void> {
     try {
       const extra: Record<string, unknown> = opts?.loud ? { disable_notification: false } : {};
       if (opts?.replyTo !== undefined) {
         extra.reply_parameters = { message_id: opts.replyTo, allow_sending_without_reply: true };
       }
+      if (opts?.replyMarkup) extra.reply_markup = opts.replyMarkup;
       await this.api.sendMessage(this.chatId, text, extra);
     } catch {
       /* non-fatal */

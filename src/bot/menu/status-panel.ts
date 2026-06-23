@@ -6,6 +6,7 @@
 import { type Api, GrammyError } from "grammy";
 import { basename } from "node:path";
 import { reasoningLabel } from "../../app/reasoning.js";
+import { progressBar } from "../../render/progress.js";
 import type { SettingsStore } from "../../app/settings-store.js";
 import { createLogger } from "../../logger.js";
 import type { RuntimeRegistry } from "../registry.js";
@@ -46,6 +47,8 @@ export class StatusPanel {
     ];
     const subagents = this.registry.subagentSummaryForChat(chatId);
     if (subagents) lines.push(`\u{1F465} Subagents: ${subagents}`);
+    const progress = rt.taskProgress;
+    if (progress !== undefined) lines.push(`\u{1F4C8} Progress:  ${progressBar(progress)}`);
     return lines.join("\n");
   }
 

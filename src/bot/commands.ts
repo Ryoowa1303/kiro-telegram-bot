@@ -23,6 +23,7 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "unwatch", description: "Stop following a live session" },
   { command: "model", description: "Switch model: /model <id>" },
   { command: "restart", description: "Restart the Kiro agent" },
+  { command: "reauth", description: "Log out & log in to Kiro (device flow)" },
   { command: "help", description: "Show help" },
 ];
 

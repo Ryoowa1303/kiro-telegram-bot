@@ -9,6 +9,8 @@ import type { PromptInput } from "../app/types.js";
 export interface ContentOptions {
   reasoning?: string;
   priming?: string;
+  /** Appended at the very bottom so the agent emits a `{progress: N%}` marker. */
+  progress?: string;
 }
 
 export function buildContentBlocks(input: PromptInput, opts: ContentOptions = {}): ContentBlock[] {
@@ -27,6 +29,9 @@ export function buildContentBlocks(input: PromptInput, opts: ContentOptions = {}
   }
   if (opts.reasoning) {
     text = `(${opts.reasoning})\n\n${text}`;
+  }
+  if (opts.progress) {
+    text = `${text}\n\n${opts.progress}`;
   }
 
   blocks.push({ type: "text", text });

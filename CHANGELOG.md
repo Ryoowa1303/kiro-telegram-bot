@@ -7,6 +7,59 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The latest section is published verbatim as the GitHub Release notes by
 `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed.
 
+## [1.7.0] - 2026-06-23
+
+The **"take control"** release — stop a runaway session by PID, re-authenticate
+Kiro from your phone, watch a live task-progress bar, and install on Windows
+without admin.
+
+### Added
+
+- **🛑 Kill a session / PID from its card (`/sessions`, `/active`).** Every
+  **live** session card now has a **`🛑 Kill · pid N`** button that terminates
+  that session's process — and its whole child tree on Windows (`taskkill /T`).
+  It's guarded by an inline **confirm** (Kill / Cancel) since it's destructive,
+  the bot's **own** agent process is never offered (killing it would take the
+  bot down), and the session state is re-read at every step so a session that
+  already stopped reports "no longer running" instead of a phantom kill. The
+  existing `/killall` (stop every active session at once) is unchanged and now
+  shares the same kill logic.
+- **🔐 Re-authenticate Kiro from Telegram (`/reauth`).** Logs out
+  (`kiro-cli logout`) and starts a fresh **device-flow** login
+  (`kiro-cli login --use-device-flow`) — the verification URL + code are
+  **streamed into the chat** so you complete it on your own device — then
+  **restarts the agent** so it picks up the new credentials. Refused while a
+  turn is in flight (logging out would break it) and serialised so two runs
+  can't overlap. Pass-through flags are supported, e.g.
+  `/reauth --license free` or `/reauth --license pro --region <r> --identity-provider <url>`.
+- **📈 Live task-progress bar (`SHOW_PROGRESS`, on by default).** The agent is
+  asked to end each message with a `{progress: N%}` marker; the bot **parses and
+  hides** it and renders a **green 0–100 % loading bar** (`🟩🟩🟩⬜⬜⬜ 50%`,
+  all-green ✅ at 100 %) at the bottom of the **live message**, in the pinned
+  **status panel**, and on **`/running` and `/sessions` cards** — so you can see
+  how far along the current task is. Markers (and the instruction) are also
+  stripped from history, unread replays, previews and fork-priming, so the raw
+  plumbing never shows. Disable with `SHOW_PROGRESS=false`.
+- **🔀 "Switch to this session" on background pings.** A **`📨 From other
+  session`** Done/error notification now carries a **🔀 Switch to this session**
+  button that brings that session to the foreground in one tap.
+
+### Changed
+
+- **🪟 Windows install no longer needs admin.** `kiro-tg install` used to fail
+  with **`schtasks create failed: ERROR: Access is denied`** for a normal user,
+  because registering a **logon-triggered** Scheduled Task is a privileged
+  operation. The installer now falls back to a hidden per-user **Startup-folder**
+  launcher (runs at logon, **no elevation**) when the task can't be created; an
+  **elevated** run still uses the nicer hidden Scheduled Task. `install`,
+  `start`, `stop`, `status` and `uninstall` understand both mechanisms, and a
+  pre-launch running-check prevents a **double-launch** (two pollers on one bot
+  token would otherwise trigger Telegram 409 Conflict).
+- **🔕 No interim "Done" ping from a busy background session.** A background
+  ("other session") turn that still has **queued follow-ups** no longer pings an
+  intermediate "Done" — only the final, queue-empty turn announces completion,
+  so a session working through a queue doesn't spam you between steps.
+
 ## [1.6.0] - 2026-06-23
 
 The **"always-on & self-healing"** release — the bot keeps itself up to date,
@@ -300,6 +353,7 @@ from a single chat and switch between them, on a redesigned, compact menu.
   diffs, MarkdownV2 rendering, scheduled tasks, multi-image prompts, and a
   cross-platform 24/7 background service.
 
+[1.7.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.7.0
 [1.6.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.6.0
 [1.5.1]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.5.1
 [1.5.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.5.0
