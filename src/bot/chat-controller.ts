@@ -255,6 +255,13 @@ export class ChatController {
     const rt = new SessionRuntime(this.api, this.chatId, this.acp, this.cfg, this.settings, init);
     rt.onStateChange = () => this.refresh(this.chatId);
     rt.onActivity = (busy) => this.notifyActivity(busy);
+    // A logical fork (auto-fork-on-error / lost-session recovery) swaps the
+    // runtime's session id in place — re-persist the controlled list with the
+    // new id and treat the fresh session as already-seen.
+    rt.onSessionChange = () => {
+      this.markSeen(rt);
+      this.persist();
+    };
     return rt;
   }
 

@@ -290,6 +290,8 @@ Resuming an **idle** session loads it directly so you continue the exact thread.
 | `AUTO_UPDATE` | no | `true` | Hourly check npm and, when a newer version exists **and the bot is idle** (no turn/task running, no other active Kiro session), auto-update + restart + post the release notes (tagged `#update`). Global npm installs only. |
 | `UPDATE_CHECK_MS` | no | `3600000` | How often to check npm for updates (ms). |
 | `PROMPT_RETRY_ATTEMPTS` | no | `5` | Max retries for a transient agent error (e.g. high-traffic / `Internal error`) before any output streamed, with `6s → 12s → 24s → 48s → 60s` backoff. The real error shows each attempt; a summary after the last. `0` disables. |
+| `AUTO_FORK_ON_ERROR` | no | `true` | When the retries above are exhausted on a transient error (throttle / `Internal error` / exhausted context) and nothing streamed, **logically fork** the session — open a fresh continuation primed with the recent transcript, drop the stuck session, and retry the message once. |
+| `AUTO_FORK_CONTEXT_PCT` | no | `85` | When a prompt fails transiently **and** the session's last-known context usage is at/above this %, **skip the retry backoff and fork immediately** — a context-exhausted session won't recover by retrying the same oversized prompt (throttling on a near-full session shows up as `-32603 … throttled`). Forking compacts it into a fresh continuation primed with the recent transcript. Requires `AUTO_FORK_ON_ERROR`; `0` disables this trigger. |
 | `LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error`. |
 | `LOG_DIR` / `LOG_FILE` | no | `<project>/logs/…` | Log location. |
 

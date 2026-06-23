@@ -38,21 +38,26 @@ export class ResponseStreamer {
     private readonly chatId: number,
     private readonly throttleMs: number,
     private replyTo?: number,
-    private readonly footer?: string,
+    private footer?: string,
   ) {}
+
+  /** Replace the hashtag footer (used after a logical fork swaps the session id
+   *  mid-turn, so the streamed response carries the NEW session's tags). */
+  setFooter(footer: string): void {
+    this.footer = footer;
+  }
 
   /** "\n\n<footer>" appended to every finished message bubble (e.g. hashtags). */
   private footerSuffix(): string {
     return this.footer ? `\n\n${this.footer}` : "";
   }
 
-  /** reply_parameters for the FIRST message only (threads the reply to the
-   *  prompt), then cleared so later chunks/edits don't repeat it. */
+  /** reply_parameters threading EVERY message of the turn to the user's prompt,
+   *  so the whole response (all bubbles, tool calls and continuations) stays in
+   *  one thread — not just the first message. */
   private replyExtra(): Record<string, unknown> {
     if (this.replyTo === undefined) return {};
-    const extra = { reply_parameters: { message_id: this.replyTo, allow_sending_without_reply: true } };
-    this.replyTo = undefined;
-    return extra;
+    return { reply_parameters: { message_id: this.replyTo, allow_sending_without_reply: true } };
   }
 
   appendOutput(text: string): void {
@@ -114,9 +119,9 @@ export class ResponseStreamer {
       await this.sealOverflow();
       const base = renderSegs(this.segs.slice(this.sealedIdx));
       if (!base.trim()) return;
-      // The live message gets the footer (hashtags) only once it's the final
-      // bubble — appending it during streaming would make it flicker/move.
-      const src = this.closed ? `${base}${this.footerSuffix()}` : base;
+      // Every bubble — including the still-streaming live one — carries the
+      // hashtag footer so the thinking/first response is tagged immediately.
+      const src = `${base}${this.footerSuffix()}`;
       const rendered = toTelegramMarkdown(src);
       const chunks = chunkMarkdown(rendered);
       const plain = chunkMarkdown(src);

@@ -5,6 +5,7 @@ import type { Bot } from "grammy";
 import { basename } from "node:path";
 import type { BotDeps } from "../deps.js";
 import { readHistory } from "../../sessions/history.js";
+import { sessionHashtags } from "../../render/hashtags.js";
 import type { SessionMeta } from "../../sessions/types.js";
 import { sendMarkdownDoc } from "../telegram-io.js";
 
@@ -24,7 +25,7 @@ export function registerHistory(bot: Bot, deps: BotDeps): void {
       return;
     }
     const meta = deps.store.get(rt.sessionId);
-    await showHistory(deps, ctx.chat.id, rt.sessionId, meta);
+    await showHistory(deps, ctx.chat.id, rt.sessionId, meta, 16, rt.tags);
   });
 }
 
@@ -35,6 +36,7 @@ export async function showHistory(
   sessionId: string,
   meta?: SessionMeta,
   count = 16,
+  tags?: string,
 ): Promise<void> {
   const entries = readHistory(deps.store.jsonlPath(sessionId), count);
   if (entries.length === 0) {
@@ -54,5 +56,8 @@ export async function showHistory(
     })
     .join("\n\n");
 
-  await sendMarkdownDoc(deps.api, chatId, `${header}\n\n${body}`);
+  // Every AI-output surface carries the session's searchable hashtags. A static
+  // view (no live runtime) tags at least project + session id.
+  const footer = tags ?? sessionHashtags({ cwd: meta?.cwd, sessionId });
+  await sendMarkdownDoc(deps.api, chatId, `${header}\n\n${body}\n\n${footer}`);
 }

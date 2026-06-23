@@ -50,6 +50,23 @@ export function isTransientAcpError(err: Error): boolean {
   return TRANSIENT_RE.test(err.message);
 }
 
+/** Patterns that specifically indicate the request exceeded the model's context
+ *  window (as opposed to a generic rate-limit/backend hiccup). */
+const CONTEXT_EXHAUSTED_RE =
+  /context (?:length|window|limit|size|overflow)|maximum context|input (?:is )?too long|prompt (?:is )?too long|too many (?:input )?tokens|token limit|exceeds? (?:the )?(?:maximum|context|token)|reduce the (?:length|size)|context.{0,24}exhaust/i;
+
+/**
+ * Heuristic: did this failure come from an exhausted context window? Unlike a
+ * generic transient error, this will NOT clear by retrying the same oversized
+ * prompt — the session must be compacted/forked into a fresh, smaller context.
+ * Note: throttling on a near-full session often surfaces as a plain "-32603 …
+ * throttled" with no context keywords, so callers should *also* consult the
+ * session's tracked context-usage % (see SessionRuntime.isContextRelatedFailure).
+ */
+export function isContextExhaustedError(err: Error): boolean {
+  return CONTEXT_EXHAUSTED_RE.test(err.message);
+}
+
 /** Compact, log/Telegram-safe stringification of an error's data payload. */
 function shortJson(v: unknown): string {
   try {

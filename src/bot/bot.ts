@@ -100,7 +100,7 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
     menuCache: new MenuCache(),
     settings,
     statusPanel,
-    ephemeral: new Ephemeral(bot.api),
+    ephemeral: new Ephemeral(bot.api, cfg.dataDir),
     tasks,
     taskRunner,
     wizard,
@@ -198,6 +198,9 @@ export async function createBot(cfg: AppConfig, acp: AcpClient): Promise<BotBund
       }
     },
   });
+
+  // Remove any navigation surface left over from before a restart.
+  void deps.ephemeral.cleanupAll().catch(() => {});
 
   return { bot, registry, scheduler: new Scheduler(tasks, taskRunner), updater };
 }

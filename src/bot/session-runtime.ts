@@ -4,16 +4,18 @@
  * and per-chat preferences (project, agent, model, reasoning). State persists
  * to the settings store so it survives restarts.
  */
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import type { Api } from "grammy";
-import { type AcpClient, isTransientAcpError } from "../acp/client.js";
+import { type AcpClient, isContextExhaustedError, isTransientAcpError } from "../acp/client.js";
 import type { ContentBlock, PromptResult, SessionUpdate } from "../acp/types.js";
 import type { AppConfig } from "../config.js";
 import { reasoningDirective } from "../app/reasoning.js";
 import type { SettingsStore } from "../app/settings-store.js";
 import { type PromptInput, type ReasoningEffort, textPrompt } from "../app/types.js";
 import { createLogger } from "../logger.js";
-import { buildTranscript, readHistory } from "../sessions/history.js";
+import { buildTranscript } from "../sessions/history.js";
+import { sessionHashtags } from "../render/hashtags.js";
+import { buildPriming, recentTranscript } from "./session-fork.js";
 import { TailWatcher } from "../sessions/tail.js";
 import type { HistoryEntry } from "../sessions/types.js";
 import { formatToolCall } from "../render/tool-call.js";
@@ -82,6 +84,10 @@ export class SessionRuntime {
   private readonly restartListener: () => void;
   /** Invoked when this runtime starts/stops a turn (for subagent attribution). */
   onActivity: ((busy: boolean) => void) | undefined;
+  /** Invoked when this runtime adopts a *different* session id (new session or
+   *  a logical fork), so the owning ChatController can re-persist its controlled
+   *  list and mark the new session seen. */
+  onSessionChange: (() => void) | undefined;
 
   constructor(
     private readonly api: Api,
@@ -129,6 +135,12 @@ export class SessionRuntime {
   /** The Done/summary of this session's most recent finished turn, if any. */
   get lastTurnSummary(): string | undefined {
     return this.lastCompletion;
+  }
+
+  /** Searchable hashtag footer for this session (project · session · model ·
+   *  reasoning) — appended to every AI-output surface for this session. */
+  get tags(): string {
+    return this.hashtags();
   }
 
   /** Switch live-streaming on/off. Going background seals any in-flight turn;
@@ -184,6 +196,15 @@ export class SessionRuntime {
 
   async startNewSession(cwd: string, projectName?: string): Promise<void> {
     if (this.busy) await this.cancel();
+    await this.bindNewSession(cwd, projectName);
+  }
+
+  /**
+   * Create a fresh live session and adopt it. Does NOT cancel an in-flight turn
+   * (the caller decides), so the auto-fork-on-error path can swap to a clean
+   * session mid-turn without flagging the turn as user-cancelled.
+   */
+  private async bindNewSession(cwd: string, projectName?: string): Promise<void> {
     this.stopWatch();
     this.sessionId = await this.acp.newSession(cwd);
     this.sessionLive = true;
@@ -192,6 +213,7 @@ export class SessionRuntime {
     this.projectName = projectName;
     await this.applySessionPrefs();
     this.persist();
+    this.sessionChanged();
     log.info(`chat ${this.chatId} -> new session ${this.sessionId} @ ${cwd}`);
     this.changed();
   }
@@ -393,13 +415,7 @@ export class SessionRuntime {
   /** Continue a session we could not reload by forking a fresh one primed with
    *  the lost session's recent transcript, so no context is dropped. */
   private async forkFromLostSession(lostId: string): Promise<void> {
-    let transcript = "";
-    try {
-      const entries = readHistory(join(this.cfg.sessionsDir, `${lostId}.jsonl`), 24);
-      if (entries.length > 0) transcript = buildTranscript(entries);
-    } catch {
-      /* no recoverable history on disk */
-    }
+    const transcript = recentTranscript(this.cfg.sessionsDir, lostId);
     log.warn(
       `chat ${this.chatId} could not reload ${lostId.slice(0, 8)}; forking a linked continuation` +
         (transcript ? " (primed with recent transcript)" : ""),
@@ -445,6 +461,8 @@ export class SessionRuntime {
 
     try {
       const outcome = await this.runPromptWithRetries(content);
+      const recovered = await this.maybeAutoFork(input, outcome);
+      const final = recovered ?? outcome;
       const streamedOutput = this.streamer?.hasOutput ?? false;
       if (this.streamer) await this.streamer.finalize();
       if (this.foreground) await this.sendTurnImages();
@@ -452,12 +470,12 @@ export class SessionRuntime {
       // to this session can replay its Done + summary). Only PING the chat for
       // the foreground turn, or a background turn when NOTIFY_OTHER_SESSIONS is on.
       const canPing = this.foreground || this.cfg.notifyOtherSessions;
-      if (outcome.result || this.cancelled) {
-        const live = this.completionMessage(outcome.result?.stopReason, startedAt, streamedOutput);
+      if (final.result || this.cancelled) {
+        const live = this.completionMessage(final.result?.stopReason, startedAt, streamedOutput);
         if (canPing) await this.notify(live, { loud: true, replyTo: this.turnReplyTo });
-      } else if (outcome.error) {
-        const transient = isTransientAcpError(outcome.error);
-        const live = this.errorMessage(outcome.error, startedAt, outcome.attempts, transient);
+      } else if (final.error) {
+        const transient = isTransientAcpError(final.error);
+        const live = this.errorMessage(final.error, startedAt, final.attempts, transient);
         if (canPing) await this.notify(live, { loud: true, replyTo: this.turnReplyTo });
       }
     } catch (err) {
@@ -510,6 +528,72 @@ export class SessionRuntime {
   }
 
   /**
+   * True when a prompt failure is attributable to an exhausted context window —
+   * either the error message says so, or this session's last-known context
+   * usage is at/above the configured fork threshold. Such failures won't clear
+   * by retrying the same oversized prompt (throttling on a near-full session
+   * surfaces as a plain "-32603 … throttled"), so the session must be compacted
+   * by forking a fresh, smaller continuation.
+   */
+  private isContextRelatedFailure(error: Error): boolean {
+    if (isContextExhaustedError(error)) return true;
+    const threshold = this.cfg.autoForkContextPct;
+    if (threshold <= 0) return false;
+    const pct = this.contextInfo()?.contextUsagePercentage;
+    return pct !== undefined && pct >= threshold;
+  }
+
+  /**
+   * Auto-fork-on-error recovery. When a turn fails with a *transient* error (or
+   * a context-exhaustion error) and nothing was streamed to the user, the
+   * session is throttled / context-exhausted / stuck. We "logically fork" it:
+   * open a fresh session in the same project primed with the recent transcript
+   * (the old session is dropped from this chat), then retry the SAME message
+   * once on the clean session. For context-exhausted sessions the retry backoff
+   * is skipped upstream so this fires immediately. Returns the retried outcome,
+   * or undefined when no fork was attempted.
+   */
+  private async maybeAutoFork(
+    input: PromptInput,
+    outcome: { result?: PromptResult; error?: Error; attempts: number },
+  ): Promise<{ result?: PromptResult; error?: Error; attempts: number } | undefined> {
+    if (!this.cfg.autoForkOnError || !outcome.error || !this.sessionId) return undefined;
+    if (this.cancelled || (this.streamer?.hasOutput ?? false)) return undefined;
+    const contextRelated = this.isContextRelatedFailure(outcome.error);
+    if (!isTransientAcpError(outcome.error) && !contextRelated) return undefined;
+
+    const lostId = this.sessionId;
+    const transcript = recentTranscript(this.cfg.sessionsDir, lostId);
+    if (this.foreground) {
+      const reason = contextRelated
+        ? "That session's context looks full \u2014 compacting into a fresh continuation and retrying"
+        : "That session looks exhausted or stuck \u2014 forking a fresh continuation and retrying";
+      await this.notify(
+        `\u26A0\uFE0F ${outcome.error.message}\n\n\u{1F517} ${reason}${transcript ? " (primed with the recent transcript)" : ""}\u2026`,
+        { replyTo: this.turnReplyTo },
+      );
+    }
+    try {
+      await this.bindNewSession(this.cwd, this.projectName); // new live id; old session dropped
+    } catch (e) {
+      log.warn(`auto-fork failed (agent down?): ${(e as Error).message}`);
+      return undefined;
+    }
+    log.info(
+      `chat ${this.chatId} auto-forked ${lostId.slice(0, 8)} -> ${this.sessionId!.slice(0, 8)} after ${contextRelated ? "context-exhaustion" : "transient"} error`,
+    );
+    // Reset per-turn render state so the retry streams cleanly on the new session.
+    this.shownToolIds = new Set();
+    this.subagentShown = new Map();
+    this.streamer?.setFooter(this.hashtags()); // streamed reply tags the NEW session
+    const forkContent = buildContentBlocks(input, {
+      reasoning: reasoningDirective(this.reasoning),
+      priming: transcript ? buildPriming(transcript) : undefined,
+    });
+    return this.runPromptWithRetries(forkContent);
+  }
+
+  /**
    * Run the prompt, retrying *transient* agent errors (e.g. "high volume of
    * traffic" / -32603) with an exponential backoff (6s → 12s → 24s → 48s → 60s,
    * then give up). The real error is shown to the user on every failed attempt.
@@ -531,14 +615,22 @@ export class SessionRuntime {
         return { result, attempts: attempt };
       } catch (err) {
         const error = err as Error;
+        const canRecover = !this.cancelled && !(this.streamer?.hasOutput ?? false);
+        // A context-exhausted session won't recover by retrying the same
+        // oversized prompt — skip the backoff and let auto-fork compact it now.
+        const forkInstead = canRecover && this.cfg.autoForkOnError && this.isContextRelatedFailure(error);
         const willRetry =
           attempt <= delays.length &&
-          !this.cancelled &&
-          !this.streamer?.hasOutput &&
+          canRecover &&
+          !forkInstead &&
           isTransientAcpError(error);
         if (!willRetry) return { error, attempts: attempt };
         const waitMs = delays[attempt - 1]!;
-        if (this.foreground) await this.notify(formatRetryNotice(error, attempt + 1, totalAttempts, waitMs));
+        if (this.foreground) {
+          await this.notify(formatRetryNotice(error, attempt + 1, totalAttempts, waitMs), {
+            replyTo: this.turnReplyTo,
+          });
+        }
         if (await this.interruptibleSleep(waitMs)) return { error, attempts: attempt };
       }
     }
@@ -616,16 +708,14 @@ export class SessionRuntime {
     return `[${name}${id}]`;
   }
 
-  /** Searchable Telegram hashtags so you can pull up every message of a session,
-   *  project, model or reasoning level by tapping the tag. */
+  /** Searchable Telegram hashtags so you can pull up every message of a session
+   *  or project by tapping the tag. */
   private hashtags(): string {
-    const tags = [
-      `#proj_${tagSafe(this.projectName || basename(this.cwd) || "none")}`,
-      `#model_${tagSafe(this.model || "default")}`,
-      `#reason_${tagSafe(this.reasoning)}`,
-    ];
-    if (this.sessionId) tags.splice(1, 0, `#sess_${tagSafe(this.sessionId.slice(0, 8))}`);
-    return tags.join(" ");
+    return sessionHashtags({
+      projectName: this.projectName,
+      cwd: this.cwd,
+      sessionId: this.sessionId,
+    });
   }
 
   private async flushQueue(): Promise<void> {
@@ -695,6 +785,14 @@ export class SessionRuntime {
     }
   }
 
+  private sessionChanged(): void {
+    try {
+      this.onSessionChange?.();
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   private async notify(text: string, opts?: { loud?: boolean; replyTo?: number }): Promise<void> {
     try {
       const extra: Record<string, unknown> = opts?.loud ? { disable_notification: false } : {};
@@ -717,18 +815,8 @@ export class SessionRuntime {
       })
       .filter(Boolean)
       .join("\n\n");
-    if (body.trim()) await sendMarkdownDoc(this.api, this.chatId, body);
+    if (body.trim()) await sendMarkdownDoc(this.api, this.chatId, `${body}\n\n${this.tags}`);
   }
-}
-
-/** Sanitise a value into a Telegram-safe hashtag body (letters/digits/_ only). */
-function tagSafe(v: string): string {
-  const s = v
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 40);
-  return s || "none";
 }
 
 /** Format an elapsed duration compactly (e.g. "8s", "2m 13s", "1h 4m"). */
@@ -738,19 +826,6 @@ function fmtDuration(ms: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ${s % 60}s`;
   return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
-
-
-function buildPriming(transcript: string): string {
-  return [
-    "You are resuming a conversation that is currently still running in another",
-    "window on this machine, so this is a linked continuation. Below is the recent",
-    "transcript for context — use it to continue seamlessly.",
-    "",
-    "=== RECENT TRANSCRIPT ===",
-    transcript,
-    "=== END TRANSCRIPT ===",
-  ].join("\n");
 }
 
 /** Convenience for callers that only have text. */

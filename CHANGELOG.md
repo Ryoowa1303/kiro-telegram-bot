@@ -7,7 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The latest section is published verbatim as the GitHub Release notes by
 `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed.
 
-## [1.5.2] - Unreleased
+## [1.6.0] - 2026-06-23
+
+The **"always-on & self-healing"** release — the bot keeps itself up to date,
+recovers context-full sessions on its own, threads every reply to your prompt,
+and keeps the chat tidy while you drive several sessions at once.
 
 ### Added
 
@@ -19,14 +23,25 @@ The latest section is published verbatim as the GitHub Release notes by
   release's features/fixes **tagged `#update`** so every upgrade is easy to find.
   It never interrupts work, and only acts on a global npm install (a source
   checkout is left to `git`). Tunable via `UPDATE_CHECK_MS`.
-- **🏷 Threaded replies + searchable hashtags.** Every agent message — the
-  streamed response and the Done line — is now sent as a **reply to your prompt**,
-  so each turn is visually threaded to what you asked (your prompt is left
-  untouched). **Every message bubble** of the response ends with
-  `#proj_… #sess_… #model_… #reason_…` (a long, multi-bubble response is tagged on
-  each bubble), so tapping a tag pulls up every message for that project /
-  session / model / reasoning level. Works for text, voice and photo prompts.
-
+- **🏷 Threaded replies + searchable hashtags.** **Every** message of a turn —
+  each response bubble, tool call, the retry/fork notices and the Done line — is
+  now sent as a **reply to your prompt** (not just the first one), so the whole
+  turn is visually threaded to what you asked (your prompt is left untouched).
+  **Every message bubble**, including the live thinking/streaming one, ends with
+  `#proj_… #sess_…`, so tapping a tag pulls up every message for that project or
+  session. (Model and reasoning tags were dropped — they were noisy and rarely
+  useful.) Works for text, voice and photo prompts.
+- **🔁 Instant fork on a context-full session (`AUTO_FORK_CONTEXT_PCT`, default
+  85).** Sending to a session whose context is exhausted used to fail with
+  `-32603 … The request was throttled by the service` and then burn the whole
+  retry backoff (6s → 12s → 24s → 48s → 60s ≈ 2½ min) before recovering — because
+  retrying the same oversized prompt can't succeed. Now, when a prompt fails
+  transiently **and** the session's last-known context usage is at/above
+  `AUTO_FORK_CONTEXT_PCT` (or the error explicitly names a context-window
+  overflow), the bot **skips the retries and forks immediately**: it compacts the
+  conversation into a fresh continuation primed with the recent transcript and
+  retries your message once. Requires `AUTO_FORK_ON_ERROR`; set the % to `0` to
+  disable the early trigger and keep the old retry-then-fork behavior.
 - **🗂 Open any folder / safer project creation (`/projects`).** `/projects <path>`
   now opens a session in **any existing folder** — `C:\work\app`, `/home/me/app`,
   `~/app`, even outside your `PROJECT_ROOTS` — and **errors if the path doesn't
@@ -90,7 +105,6 @@ The latest section is published verbatim as the GitHub Release notes by
   agent message could leave an orphan lone-backtick line that rendered as a
   broken-looking single backtick. Such orphan ` / `` lines are now dropped (real
   triple-backtick fences and inline `code` are untouched).
-
 - **⚡ `/btw` now runs as soon as possible.** Previously `/btw <text>` only ever
   parked the message in the queue — so when the bot was **idle** it sat there
   doing nothing until `/flush` or another message. It now runs **immediately
@@ -286,6 +300,10 @@ from a single chat and switch between them, on a redesigned, compact menu.
   diffs, MarkdownV2 rendering, scheduled tasks, multi-image prompts, and a
   cross-platform 24/7 background service.
 
+[1.6.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.6.0
+[1.5.1]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.5.1
+[1.5.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.5.0
+[1.4.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.4.0
 [1.3.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.3.0
 [1.2.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.2.0
 [1.1.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.1.0

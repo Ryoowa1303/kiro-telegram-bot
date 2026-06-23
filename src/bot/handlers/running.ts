@@ -86,7 +86,7 @@ function buildRunningCard(s: RunningSession, deps: BotDeps, now: number): { text
 
 export async function showRunning(ctx: Context, deps: BotDeps): Promise<void> {
   await deps.ephemeral.open(ctx);
-  const list = deps.registry.controller(ctx.chat!.id).list();
+  const list = dedupeBySession(deps.registry.controller(ctx.chat!.id).list());
   if (list.length === 0) {
     await deps.ephemeral.reply(ctx, "No sessions controlled yet. Use \u{1F4C1} Project or /new to start one.");
     return;
@@ -101,6 +101,18 @@ export async function showRunning(ctx: Context, deps: BotDeps): Promise<void> {
   if (list.length > shown.length) {
     await deps.ephemeral.reply(ctx, `\u2026and ${list.length - shown.length} more.`);
   }
+}
+
+/** Collapse any cards that share a session id (defensive — the controller
+ *  already prunes duplicate runtimes, but never show the same session twice). */
+function dedupeBySession(list: RunningSession[]): RunningSession[] {
+  const seen = new Set<string>();
+  return list.filter((s) => {
+    if (!s.sessionId) return true;
+    if (seen.has(s.sessionId)) return false;
+    seen.add(s.sessionId);
+    return true;
+  });
 }
 
 /** Switch the chat to a session and show its summary + unread. */
@@ -150,7 +162,7 @@ async function deliverSwitch(ctx: Context, deps: BotDeps, res: SwitchResult): Pr
     ? `\u{1F4DC} **Recent history** \u2014 ${proj}`
     : `\u{1F4EC} **${res.unread.length} message(s) while away** \u2014 ${proj}`;
   const body = res.unread.map(fmtEntry).join("\n\n");
-  await sendMarkdownDoc(deps.api, ctx.chat!.id, `${header}\n\n${body}`);
+  await sendMarkdownDoc(deps.api, ctx.chat!.id, `${header}\n\n${body}\n\n${res.rt.tags}`);
 
   // Replay how the session's last turn ended (Done + file summary) — this isn't
   // in the .jsonl, so it's the footer you'd have seen had you been watching.

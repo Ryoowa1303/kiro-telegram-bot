@@ -93,6 +93,15 @@ export interface AppConfig {
   promptIdleMs: number;
   quietNotifications: boolean;
   promptRetryAttempts: number;
+  /** After transient prompt errors are exhausted, fork the session into a fresh
+   *  primed continuation and retry once (recovers throttled/exhausted/stuck
+   *  sessions automatically). */
+  autoForkOnError: boolean;
+  /** When a prompt fails transiently and this session's last-known context
+   *  usage is at/above this percentage (0 disables), skip the retry backoff and
+   *  auto-fork immediately — a context-exhausted session won't recover by
+   *  retrying the same oversized prompt. Requires `autoForkOnError`. */
+  autoForkContextPct: number;
   sttApiUrl?: string;
   sttApiKey?: string;
   sttModel: string;
@@ -161,6 +170,8 @@ export function loadConfig(): AppConfig {
     promptIdleMs: num(process.env.PROMPT_IDLE_TIMEOUT_MS, 900_000),
     quietNotifications: bool(process.env.QUIET_NOTIFICATIONS, true),
     promptRetryAttempts: nonNegNum(process.env.PROMPT_RETRY_ATTEMPTS, 5),
+    autoForkOnError: bool(process.env.AUTO_FORK_ON_ERROR, true),
+    autoForkContextPct: nonNegNum(process.env.AUTO_FORK_CONTEXT_PCT, 85),
     dataDir: process.env.DATA_DIR?.trim()
       ? resolve(expandHome(process.env.DATA_DIR.trim()))
       : join(INSTANCE_DIR, "data"),
