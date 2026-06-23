@@ -79,6 +79,13 @@ The latest section is published verbatim as the GitHub Release notes by
 
 ### Fixed
 
+- **👯 Duplicate session cards in `/running`.** Tapping a session twice (or in
+  quick succession) could create **two runtimes for the same session** — the
+  add-session paths checked "already controlled?" and then `await`ed before
+  reserving the runtime, so concurrent taps both passed the check. The runtime
+  is now reserved synchronously after the check; restores and persistence dedupe
+  by session id; and `/running` prunes any existing duplicate, so the list
+  self-heals.
 - **🔣 Stray “`” in streamed messages.** An unbalanced/partial code fence in an
   agent message could leave an orphan lone-backtick line that rendered as a
   broken-looking single backtick. Such orphan ` / `` lines are now dropped (real

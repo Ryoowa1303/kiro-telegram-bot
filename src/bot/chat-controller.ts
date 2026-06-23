@@ -64,6 +64,7 @@ export class ChatController {
   /** List the controlled sessions (for /running). */
   list(): RunningSession[] {
     this.ensureRestored();
+    this.pruneDuplicates();
     return this.runtimes.map((rt) => ({
       sessionId: rt.sessionId,
       projectName: rt.projectName ?? basename(rt.cwd),
@@ -76,10 +77,11 @@ export class ChatController {
   /** Start a brand-new session and bring it to the foreground. */
   async addNew(cwd: string, projectName?: string): Promise<SessionRuntime> {
     this.ensureRestored();
-    await this.background(this.fg);
+    const prevFg = this.fg;
     const rt = this.create({ cwd, projectName });
     this.runtimes.push(rt);
     this.fg = rt;
+    await this.background(prevFg);
     await rt.startNewSession(cwd, projectName);
     this.markSeen(rt);
     this.persist();
@@ -101,10 +103,13 @@ export class ChatController {
       const sw = await this.switchTo(sessionId);
       return { rt: sw!.rt, result: "resumed", alreadyControlled: true };
     }
-    await this.background(this.fg);
+    // Reserve the runtime synchronously (before any await) so a concurrent tap
+    // on the same session finds it and switches instead of creating a duplicate.
+    const prevFg = this.fg;
     const rt = this.create({ cwd, projectName, sessionId });
     this.runtimes.push(rt);
     this.fg = rt;
+    await this.background(prevFg);
     const result = await rt.attach(sessionId, cwd, projectName, priorEntries);
     this.markSeen(rt);
     this.persist();
@@ -117,10 +122,11 @@ export class ChatController {
     if (this.runtimes.some((r) => r.sessionId === sessionId)) {
       return (await this.switchTo(sessionId))!;
     }
-    await this.background(this.fg);
+    const prevFg = this.fg;
     const rt = this.create({ cwd, projectName, sessionId });
     this.runtimes.push(rt);
     this.fg = rt;
+    await this.background(prevFg);
     await rt.prepare().catch(() => {});
     const path = this.store.jsonlPath(sessionId);
     const unread = readHistory(path, 12);
@@ -198,14 +204,50 @@ export class ChatController {
     if (this.restored) return;
     this.restored = true;
     const s = this.settings.get(this.chatId);
+    const seen = new Set<string>();
     for (const cs of s.controlledSessions ?? []) {
-      if (!cs.sessionId) continue;
+      if (!cs.sessionId || seen.has(cs.sessionId)) continue; // never restore the same session twice
+      seen.add(cs.sessionId);
       this.runtimes.push(this.create({ cwd: cs.projectPath, projectName: cs.projectName, sessionId: cs.sessionId }));
     }
     if (this.runtimes.length > 0) {
       const fg = this.runtimes.find((r) => r.sessionId === s.foregroundSessionId) ?? this.runtimes[0]!;
       for (const r of this.runtimes) void r.setForeground(r === fg);
       this.fg = fg;
+    }
+  }
+
+  /** Drop any runtime that duplicates another's sessionId (keeping the
+   *  foreground one), healing a state where two runtimes wrap one session. */
+  private pruneDuplicates(): void {
+    const byId = new Map<string, SessionRuntime>();
+    const kept: SessionRuntime[] = [];
+    for (const rt of this.runtimes) {
+      const id = rt.sessionId;
+      if (!id) {
+        kept.push(rt);
+        continue;
+      }
+      const prev = byId.get(id);
+      if (!prev) {
+        byId.set(id, rt);
+        kept.push(rt);
+        continue;
+      }
+      const loser = prev.isForeground || !rt.isForeground ? rt : prev;
+      const winner = loser === rt ? prev : rt;
+      if (winner !== prev) {
+        byId.set(id, winner);
+        const i = kept.indexOf(prev);
+        if (i !== -1) kept[i] = winner;
+      }
+      if (this.fg === loser) this.fg = winner;
+      loser.dispose();
+    }
+    if (kept.length !== this.runtimes.length) {
+      this.runtimes.length = 0;
+      this.runtimes.push(...kept);
+      this.persist();
     }
   }
 
@@ -234,9 +276,13 @@ export class ChatController {
   }
 
   private persist(): void {
-    const controlled = this.runtimes
-      .filter((r) => r.sessionId)
-      .map((r) => ({ sessionId: r.sessionId, projectPath: r.cwd, projectName: r.projectName }));
+    const seen = new Set<string>();
+    const controlled: { sessionId?: string; projectPath: string; projectName?: string }[] = [];
+    for (const r of this.runtimes) {
+      if (!r.sessionId || seen.has(r.sessionId)) continue;
+      seen.add(r.sessionId);
+      controlled.push({ sessionId: r.sessionId, projectPath: r.cwd, projectName: r.projectName });
+    }
     this.settings.update(this.chatId, {
       controlledSessions: controlled,
       foregroundSessionId: this.fg?.sessionId,
