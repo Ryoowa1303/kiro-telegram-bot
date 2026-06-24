@@ -8,6 +8,7 @@ node_modules/
 # Logs & runtime
 *.log
 logs/
+.history
 data/
 
 # Generated service launchers

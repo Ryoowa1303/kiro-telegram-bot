@@ -1,86 +1,89 @@
 /**
- * /reauth — log out of Kiro and start a fresh device-flow login, streaming the
- * verification URL + code into the chat. On success the ACP agent is restarted
- * so it picks up the new credentials.
+ * /reauth — re-authenticate Kiro. Instead of always running one provider's
+ * device flow, it first shows a login-method picker (Builder ID, Google,
+ * GitHub, IAM Identity Center). The chosen method drives a logout → device-flow
+ * login → agent restart on a single, self-animated status message. Inline
+ * buttons drive the flow:
+ *   • Builder ID / Google / GitHub / IAM Identity Center — pick how to log in
+ *   • Cancel        — abort the picker or the in-flight logout/login
+ *   • Back / Change method — return to the picker
+ *   • Retry         — re-run the last method on the same message
+ *   • Restart agent — retry just the agent restart after a restart failure
+ *
+ * Power users can still skip the picker by passing flags directly, e.g.
+ * `/reauth --license pro --identity-provider <url> --region <region>`.
  *
  * Guarded: refused while a prompt is in flight (logging out would break the
- * running turn) and serialised so two /reauth runs can't overlap.
+ * running turn) and serialised per chat so two runs can't overlap.
  */
 import type { Bot } from "grammy";
-import { AuthService } from "../../app/auth-service.js";
-import { createLogger } from "../../logger.js";
 import type { BotDeps } from "../deps.js";
-
-const log = createLogger("reauth");
-
-/** Keep the last N chars of a transcript (the device URL/code are near the end). */
-function tail(s: string, n: number): string {
-  const t = s.trim();
-  return t.length > n ? "\u2026" + t.slice(-n) : t;
-}
+import { type LoginMethod, ReauthController } from "../reauth-controller.js";
 
 export function registerReauth(bot: Bot, deps: BotDeps): void {
-  const auth = new AuthService(deps.cfg.kiroCliPath);
-  let inProgress = false;
+  const controller = new ReauthController(deps.api, deps.acp, deps.cfg.kiroCliPath, () => deps.usage.account());
+
+  // IDC start-URL/region text capture. Registered before the catch-all message
+  // handler so the reply feeds the reauth flow instead of becoming a prompt.
+  bot.on("message:text", async (ctx, next) => {
+    const chatId = ctx.chat.id;
+    if (!controller.awaitingIdcInput(chatId)) return next();
+    const text = ctx.message.text;
+    if (text.startsWith("/")) return next(); // let a command through; picker stays
+    await controller.submitIdcInput(chatId, text);
+  });
 
   bot.command("reauth", async (ctx) => {
-    if (inProgress) {
+    if (controller.isBusy(ctx.chat.id)) {
       await ctx.reply("\u{1F510} A re-authentication is already in progress.");
       return;
     }
-    if (deps.acp.hasInflightPrompt()) {
-      await ctx.reply("\u23F3 Kiro is busy running a turn \u2014 try /reauth when idle (or /cancel first).");
-      return;
-    }
     const extra = (ctx.match?.toString() ?? "").trim().split(/\s+/).filter(Boolean);
+    // Explicit flags skip the picker (advanced / scripted use); otherwise ask.
+    if (extra.length > 0) await controller.begin(ctx.chat.id, extra);
+    else await controller.chooseMethod(ctx.chat.id);
+  });
 
-    inProgress = true;
-    try {
-      await ctx.reply("\u{1F510} Re-authenticating Kiro\u2026\n\u{1F6AA} Logging out\u2026");
-      const out = await auth.logout();
-
-      // A status message we keep editing (throttled) with the login transcript.
-      const msg = await ctx.reply(
-        `\u{1F6AA} Logged out${out.out ? `: ${tail(out.out, 200)}` : "."}\n\n\u{1F511} Starting device-flow login\u2026`,
-      );
-
-      let transcript = "";
-      let timer: NodeJS.Timeout | undefined;
-      const flush = async (): Promise<void> => {
-        timer = undefined;
-        const text = `\u{1F511} Kiro login (device flow)\n\n${tail(transcript, 1200) || "\u2026"}`;
-        await ctx.api.editMessageText(ctx.chat.id, msg.message_id, text).catch(() => {});
-      };
-      const onOutput = (t: string): void => {
-        transcript += t;
-        if (!timer) timer = setTimeout(() => void flush(), 800);
-      };
-
-      const result = await auth.login(extra, onOutput, 300_000);
-      if (timer) clearTimeout(timer);
-      await flush(); // show the final transcript
-
-      if (result.ok) {
-        await ctx.reply("\u2705 Logged in. Restarting the Kiro agent\u2026");
-        try {
-          await deps.acp.restart();
-          await ctx.reply("\u2705 Re-authenticated and agent restarted. Your session re-binds on the next message.");
-        } catch (e) {
-          await ctx.reply(`\u26A0\uFE0F Logged in, but agent restart failed: ${(e as Error).message}. Use /restart.`);
-        }
-      } else {
-        await ctx.reply(
-          `\u274C Login did not complete (exit ${result.code ?? "?"}).\n` +
-            "If it asked for a license, retry with the flag, e.g.\n" +
-            "\u2022 /reauth --license free\n" +
-            "\u2022 /reauth --license pro --region <region> --identity-provider <url>",
-        );
-      }
-    } catch (e) {
-      log.warn("reauth failed:", (e as Error).message);
-      await ctx.reply(`\u274C Re-auth error: ${(e as Error).message}`);
-    } finally {
-      inProgress = false;
+  bot.callbackQuery(/^reauth:method:(builder|google|github|idc)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const chatId = ctx.chat?.id;
+    const messageId = ctx.callbackQuery.message?.message_id;
+    if (chatId !== undefined && messageId !== undefined) {
+      await controller.pickMethod(chatId, messageId, ctx.match![1] as LoginMethod);
     }
+  });
+
+  bot.callbackQuery("reauth:choose-back", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const chatId = ctx.chat?.id;
+    const messageId = ctx.callbackQuery.message?.message_id;
+    if (chatId !== undefined && messageId !== undefined) await controller.chooseMethod(chatId, messageId);
+  });
+
+  bot.callbackQuery("reauth:choose-cancel", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Cancelled" });
+    const chatId = ctx.chat?.id;
+    const messageId = ctx.callbackQuery.message?.message_id;
+    if (chatId !== undefined && messageId !== undefined) await controller.cancelChoice(chatId, messageId);
+  });
+
+  bot.callbackQuery("reauth:cancel", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const ok = chatId !== undefined && controller.cancel(chatId);
+    await ctx.answerCallbackQuery({ text: ok ? "Cancelling\u2026" : "Nothing to cancel" });
+  });
+
+  bot.callbackQuery("reauth:retry", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Retrying\u2026" });
+    const chatId = ctx.chat?.id;
+    const messageId = ctx.callbackQuery.message?.message_id;
+    if (chatId !== undefined && messageId !== undefined) await controller.retry(chatId, messageId);
+  });
+
+  bot.callbackQuery("reauth:restart", async (ctx) => {
+    await ctx.answerCallbackQuery({ text: "Restarting agent\u2026" });
+    const chatId = ctx.chat?.id;
+    const messageId = ctx.callbackQuery.message?.message_id;
+    if (chatId !== undefined && messageId !== undefined) await controller.restartAgent(chatId, messageId);
   });
 }

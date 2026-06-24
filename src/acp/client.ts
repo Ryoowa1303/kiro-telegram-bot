@@ -159,24 +159,31 @@ export class AcpClient extends EventEmitter {
     if (this.opts.agent) args.push("--agent", this.opts.agent);
 
     log.info(`spawning: ${this.opts.kiroCliPath} ${args.join(" ")}`);
-    this.proc = spawn(this.opts.kiroCliPath, args, {
+    const proc = spawn(this.opts.kiroCliPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
       cwd: this.opts.workspace,
       env: { ...process.env, KIRO_LOG_LEVEL: process.env.KIRO_LOG_LEVEL || "error" },
     }) as ChildProcessWithoutNullStreams;
+    this.proc = proc;
 
-    this.proc.on("exit", (code) => {
+    proc.on("exit", (code) => {
+      // Ignore the exit of a process we've already replaced (a deliberate
+      // restart/stop). Its teardown must NOT fail the new process's pending
+      // requests nor trigger a competing auto-restart — that race was the cause
+      // of "/reauth → agent restart failed: kiro-cli acp exited (code null)".
+      if (this.proc !== proc) return;
       log.warn(`kiro-cli acp exited (code ${code})`);
       this.failAllPending(new Error(`kiro-cli acp exited (code ${code})`));
       this.emit("exit", code);
       this.maybeRestart();
     });
-    this.proc.on("error", (err) => {
+    proc.on("error", (err) => {
+      if (this.proc !== proc) return;
       log.error("failed to spawn kiro-cli:", err.message);
       this.failAllPending(err);
     });
 
-    this.transport = new JsonRpcTransport(this.proc);
+    this.transport = new JsonRpcTransport(proc);
     this.transport.on("message", (m: JsonRpcMessage) => this.onMessage(m));
 
     const init = (await this.request("initialize", {
@@ -329,20 +336,85 @@ export class AcpClient extends EventEmitter {
 
   stop(): void {
     this.stopped = true;
-    if (this.restartTimer) clearTimeout(this.restartTimer);
-    this.proc?.kill();
-    this.proc = undefined;
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = undefined;
+    }
+    void this.killCurrent();
   }
 
-  /** Manually restart the agent (used by the /restart command). */
-  async restart(): Promise<void> {
+  /**
+   * Stop the agent and WAIT for the process to fully exit, leaving it stopped
+   * (no auto-restart until start()/restart()). Used by /reauth to release the
+   * held session BEFORE logging out — otherwise the live agent keeps refreshing
+   * and re-persisting the old token, silently restoring the previous identity.
+   */
+  async stopAndWait(): Promise<void> {
     this.stopped = true;
-    if (this.restartTimer) clearTimeout(this.restartTimer);
-    this.proc?.kill();
-    this.proc = undefined;
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = undefined;
+    }
+    await this.killCurrent();
+  }
+
+  /**
+   * Manually restart the agent (used by /restart, /reauth and the MCP toggle).
+   * The old process is fully torn down BEFORE a fresh one is spawned, so its
+   * exit can't fail the new connection's `initialize` — which previously
+   * surfaced as "agent restart failed: kiro-cli acp exited (code null)".
+   */
+  async restart(): Promise<void> {
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = undefined;
+    }
+    this.stopped = true; // suppress auto-restart while we swap processes
+    this.restartAttempts = 0;
+    await this.killCurrent();
     this.stopped = false;
     await this.connect();
     this.emit("restarted");
+  }
+
+  /**
+   * Terminate the current process and wait for it to fully exit. Clearing
+   * `this.proc` first makes the connect()-registered exit/error handlers
+   * short-circuit, so a deliberate teardown is silent (no `exit` event, no
+   * auto-restart). In-flight requests are rejected here (the handler no longer
+   * will). Escalates to SIGKILL if the process lingers, and never hangs.
+   */
+  private killCurrent(): Promise<void> {
+    const proc = this.proc;
+    this.proc = undefined;
+    this.transport = undefined;
+    this.failAllPending(new Error("kiro-cli acp is restarting"));
+    if (!proc || proc.exitCode !== null || proc.signalCode !== null) {
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const done = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(hard);
+        resolve();
+      };
+      const hard = setTimeout(() => {
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          /* ignore */
+        }
+        setTimeout(done, 500); // give the OS a beat, then proceed regardless
+      }, 4000);
+      proc.once("exit", done);
+      try {
+        proc.kill();
+      } catch {
+        done();
+      }
+    });
   }
 
   // ── JSON-RPC plumbing ──────────────────────────────────────────────────────

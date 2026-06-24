@@ -7,6 +7,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The latest section is published verbatim as the GitHub Release notes by
 `.github/workflows/release.yml` when a `vX.Y.Z` tag is pushed.
 
+## [1.7.1] - 2026-06-24
+
+The **"sign in your way"** release — `/reauth` now lets you pick how you log in
+(Builder ID, Google, GitHub or IAM Identity Center) on one tidy status card, and
+the live task-progress bar climbs steadily instead of appearing only at the end.
+
+### Added
+
+- **🔐 `/reauth` login-method picker.** Re-authentication now opens with a
+  **picker** — **Builder ID** (free), **Google**, **GitHub**, or **IAM Identity
+  Center** (Pro) — driven on a **single, self-animated status message** with
+  inline **Cancel · Retry · Change method · Restart agent** controls, so the chat
+  no longer fills with raw spinner frames. **IAM Identity Center** sign-in is now
+  fully supported: the bot asks for your **start URL + region** and drives the
+  CLI's interactive prompts inside a pseudo-terminal (optional
+  `@homebridge/node-pty-prebuilt-multiarch` dependency; a clear message tells you
+  to run `npm install` if it's missing). The device-verification URL + code still
+  stream to the chat for every method. Power users can skip the picker by passing
+  flags directly, e.g. `/reauth --license pro --identity-provider <url> --region <region>`.
+
+### Changed
+
+- **📈 Stricter, steadier task-progress reporting.** The agent instruction behind
+  the `{progress: N%}` marker is now far more rigorous: a marker is required on
+  **every** message (not only the last), the number must be **computed from real
+  step completion** and is **monotonic** (never decreases within a task), and
+  **100 %** is reserved for work that is fully complete *and verified*. The bar
+  now advances in realistic increments instead of jumping to a value at the very
+  end.
+
+### Fixed
+
+- **🔁 `/reauth` agent-restart race** (`agent restart failed: kiro-cli acp exited
+  (code null)`). Logging out and restarting could let the **old** agent process's
+  exit fail the **new** connection's `initialize` and even trigger a competing
+  auto-restart. The ACP client now **fully tears down** the previous process
+  (ignoring the exit of a process it has already replaced) **before** spawning a
+  fresh one, and `/reauth` takes the agent down and **waits** before logging out —
+  so a deliberate restart is clean and the new identity sticks.
+- **🪪 Stale identity after re-login.** On logout the bot now also **clears Kiro's
+  cached auth token** (`~/.aws/sso/cache/kiro-auth-token.json`), so the next login
+  performs a genuine device-flow authentication instead of silently reusing the
+  previous account's refreshable token.
+
 ## [1.7.0] - 2026-06-23
 
 The **"take control"** release — stop a runaway session by PID, re-authenticate
@@ -353,6 +397,7 @@ from a single chat and switch between them, on a redesigned, compact menu.
   diffs, MarkdownV2 rendering, scheduled tasks, multi-image prompts, and a
   cross-platform 24/7 background service.
 
+[1.7.1]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.7.1
 [1.7.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.7.0
 [1.6.0]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.6.0
 [1.5.1]: https://github.com/artickc/kiro-telegram-bot/releases/tag/v1.5.1
